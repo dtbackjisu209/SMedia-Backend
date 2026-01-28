@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "migration:generate": "npm run build && typeorm migration:generate src/migrations/init -d dist/data-source.js",
+    "migration:run": "typeorm migration:run -d dist/data-source.js"
   },
   "type": "module",
   "keywords": [],
@@ -15,7 +19,9 @@
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
-    "mysql2": "^3.16.1"
+    "mysql2": "^3.16.2",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.28"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

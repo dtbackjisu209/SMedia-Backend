@@ -1,27 +1,27 @@
 import {Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn} from 'typeorm';
 import { User } from './user.model.js';
-import { Post } from './post.model.js';
 
-@Entity('comments')
-export class Comment {
+@Entity('stories')
+export class Story {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: number;
-
-  @ManyToOne(() => Post)
-  @JoinColumn({ name: 'post_id' })
-  post!: Post;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
-  @ManyToOne(() => Comment, { nullable: true })
-  @JoinColumn({ name: 'parent_id' })
-  parent!: Comment;
-
   @Column('text')
-  content!: string;
+  media_url!: string;
 
-  @CreateDateColumn({type: 'timestamp'})
+  @Column({
+    type: 'enum',
+    enum: ['image', 'video'],
+  })
+  media_type!: 'image' | 'video';
+
+  @Column()
+  expires_at!: Date;
+
+  @CreateDateColumn()
   created_at!: Date;
 }

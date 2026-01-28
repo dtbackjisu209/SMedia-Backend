@@ -12,6 +12,8 @@
     "sourceMap": true,
     "allowJs": true,
     "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "baseUrl": "./src",
     "paths": {
       "*": ["*"]

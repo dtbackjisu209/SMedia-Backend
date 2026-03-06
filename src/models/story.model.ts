@@ -1,4 +1,4 @@
-import {Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { User } from './user.model.js';
 
 @Entity('stories')
@@ -19,9 +19,9 @@ export class Story {
   })
   media_type!: 'image' | 'video';
 
-  @Column()
+  @Column({ type: 'timestamp' })
   expires_at!: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 }

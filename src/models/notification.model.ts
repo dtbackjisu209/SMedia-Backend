@@ -1,8 +1,9 @@
-import {Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { User } from './user.model.js';
 
 @Entity('notifications')
 export class Notification {
+
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: number;
 
@@ -19,9 +20,9 @@ export class Notification {
   @Column({ type: 'bigint', nullable: true })
   reference_id!: number;
 
-  @Column({ default: false })
+  @Column({ type: 'boolean', default: false })
   is_read!: boolean;
 
-  @CreateDateColumn({type: 'timestamp'})
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 }

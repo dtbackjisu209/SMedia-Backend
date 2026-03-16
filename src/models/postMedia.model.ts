@@ -1,8 +1,9 @@
-import {Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Post } from './post.model.js';
 
 @Entity('post_media')
 export class PostMedia {
+
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: number;
 
@@ -19,6 +20,7 @@ export class PostMedia {
   })
   media_type!: 'image' | 'video';
 
-  @Column({ default: 0 })
+  @Column({ type: 'int', default: 0 })
   position!: number;
+
 }

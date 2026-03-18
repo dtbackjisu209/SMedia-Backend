@@ -1,0 +1,13 @@
+User chọn file (ảnh/video)
+         │
+         ▼
+Frontend GET /upload-signature ──────────────► Backend tạo signature & timestamp
+         │
+         ▼
+Frontend upload file trực tiếp ─────────────► Cloudinary
+         │                                       │
+         ▼                                       ▼
+       Upload xong                            Cloudinary trả về URL
+         │
+         ▼
+Frontend POST /api/posts ───────────────────► Backend lưu metadata + Redis feed

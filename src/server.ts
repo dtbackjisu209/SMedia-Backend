@@ -5,12 +5,25 @@ import { AppDataSource } from "./data-source.js";
 import { Server, Socket } from "socket.io"; 
 import { chatSocket } from "./socket/chat.socket.js";
 import { notificationSocket } from "./socket/notification.socket.js";
+import { ensureRedisConnected, redisClient } from './config/redis.js';
+import { checkCloudinaryConnection } from './config/cloudinary.js';
 const PORT = 3000;
 
 // 1. Khởi tạo Database trước
 AppDataSource.initialize()
     .then(() => {
         console.log("Database has been initialized!");
+
+        checkCloudinaryConnection()
+            .then(() => console.log('Cloudinary connected'))
+            .catch((error) => console.error('Cloudinary connection failed:', error));
+
+        ensureRedisConnected()
+            .then(async () => {
+                const pong = await redisClient.ping();
+                console.log(`Redis connected (${pong})`);
+            })
+            .catch((error) => console.error('Redis connection failed:', error));
 
         // 2. Tạo HTTP Server từ Express App
         // Socket.io cần một HTTP Server thuần để đính kèm vào

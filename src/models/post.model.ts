@@ -11,10 +11,10 @@ export class Post {
   user!: User;
 
   @Column('text', { nullable: true })
-  caption!: string;
+  caption!: string | null;
 
   @Column({type: 'varchar', length: 255, nullable: true })
-  location!: string;
+  location!: string | null;
 
   @CreateDateColumn({type: 'timestamp'})
   created_at!: Date;

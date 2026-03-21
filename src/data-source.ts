@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
-import { dbConfig } from './config/database.js';
+import { dbConfig } from './core/config/database.js';
 import {
   User,
   Post,
@@ -18,7 +18,7 @@ import {
   Story,
   StoryView,
   UserBlock,
-} from './models/index.js';
+} from './database/entity/index.js';
 
 
 export const AppDataSource = new DataSource({
@@ -44,7 +44,7 @@ entities: [
 ],
 
 
-  migrations: ['dist/migrations/*.js'],
+  migrations: ['dist/database/migrations/*.js'],
   synchronize: false,
   logging: true,
 });

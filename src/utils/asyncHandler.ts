@@ -1,1 +1,1 @@
-export { asyncHandler } from '../middleware/async-handler.js';
+export { asyncHandler } from '../core/middleware/async-handler.js';

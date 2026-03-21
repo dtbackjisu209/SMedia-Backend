@@ -3,10 +3,10 @@ import app from './app.js';
 import http from "http";
 import { AppDataSource } from "./data-source.js";
 import { Server, Socket } from "socket.io"; 
-import { chatSocket } from "./socket/chat.socket.js";
-import { notificationSocket } from "./socket/notification.socket.js";
-import { ensureRedisConnected, redisClient } from './config/redis.js';
-import { checkCloudinaryConnection } from './config/cloudinary.js';
+import { chatSocket } from './modules/conversation/conversation.socket.js';
+import { notificationSocket } from './modules/notification/notification.socket.js';
+import { ensureRedisConnected, redisClient } from './core/config/redis.js';
+import { checkCloudinaryConnection } from './core/config/cloudinary.js';
 const PORT = 3000;
 
 // 1. Khởi tạo Database trước

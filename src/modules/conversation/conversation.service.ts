@@ -4,70 +4,115 @@ import { ConversationMember } from '../../database/entity/conversationMember.ent
 import { Message } from '../../database/entity/message.entity.js';
 
 export class ChatService {
-	private messageRepo = AppDataSource.getRepository(Message);
-	private conversationRepo = AppDataSource.getRepository(Conversation);
-	private memberRepo = AppDataSource.getRepository(ConversationMember);
+    private messageRepo = AppDataSource.getRepository(Message);
+    private conversationRepo = AppDataSource.getRepository(Conversation);
+    private memberRepo = AppDataSource.getRepository(ConversationMember);
 
-	async getOrCreateConversation(user1Id: number, user2Id: number): Promise<string> {
-		const result = await AppDataSource.query(
-			`
-			SELECT conversation_id
-			FROM conversation_members
-			WHERE user_id IN (?, ?)
-			GROUP BY conversation_id
-			HAVING COUNT(DISTINCT user_id) = 2
-		`,
-			[user1Id, user2Id],
-		);
+    /**
+     * CHAT 1-1: Tìm hoặc tạo cuộc hội thoại giữa 2 người
+     */
+    async getOrCreateConversation(user1Id: number, user2Id: number): Promise<string> {
+        const result = await AppDataSource.query(
+            `
+            SELECT conversation_id
+            FROM conversation_members
+            WHERE user_id IN (?, ?)
+            GROUP BY conversation_id
+            HAVING COUNT(DISTINCT user_id) = 2
+            `,
+            [user1Id, user2Id],
+        );
 
-		if (result.length > 0) {
-			return result[0].conversation_id.toString();
-		}
+        if (result.length > 0) {
+            return result[0].conversation_id.toString();
+        }
 
-		const newConv = this.conversationRepo.create();
-		const savedConv = await this.conversationRepo.save(newConv);
+        const newConv = this.conversationRepo.create();
+        const savedConv = await this.conversationRepo.save(newConv);
 
-		await this.memberRepo.save([
-			{ conversation_id: savedConv.id, user_id: user1Id as never },
-			{ conversation_id: savedConv.id, user_id: user2Id as never },
-		]);
+        await this.memberRepo.save([
+            { conversation_id: savedConv.id, user_id: user1Id as any },
+            { conversation_id: savedConv.id, user_id: user2Id as any },
+        ]);
 
-		return savedConv.id.toString();
-	}
+        return savedConv.id.toString();
+    }
 
-	async saveMessage(conversationId: string, senderId: string, content: string) {
-		const newMessage = this.messageRepo.create({
-			conversation: { id: Number(conversationId) } as never,
-			sender: { id: Number(senderId) } as never,
-			content,
-		});
+    /**
+     * CHAT NHÓM: Tạo hội thoại nhóm
+     */
+    async createGroupConversation(name: string, memberIds: number[]): Promise<Conversation> {
+        const newConv = this.conversationRepo.create({
+            name: name 
+        } as any);
+        
+        const savedConv = (await this.conversationRepo.save(newConv)) as any;
 
-		const savedMsg = await this.messageRepo.save(newMessage);
+        const members = memberIds.map(id => ({
+            conversation_id: savedConv.id,
+            user_id: id as any
+        }));
+        await this.memberRepo.save(members);
 
-		return {
-			id: savedMsg.id.toString(),
-			conversation_id: conversationId,
-			sender_id: senderId,
-			content: savedMsg.content,
-			created_at: savedMsg.created_at,
-		};
-	}
+        return savedConv;
+    }
 
-	async getConversationMessages(conversationId: string, limit = 50) {
-		const messages = await this.messageRepo.find({
-			where: { conversation: { id: Number(conversationId) } },
-			relations: ['sender'],
-			order: { created_at: 'ASC' },
-			take: limit,
-		});
+    /**
+     * Lấy tất cả hội thoại mà User đang tham gia
+     */
+    async getUserConversations(userId: number): Promise<any[]> {
+        return await this.memberRepo.find({
+            where: { user_id: userId as any },
+            select: ['conversation_id']
+        });
+    }
 
-		return messages.map((m) => ({
-			id: m.id.toString(),
-			content: m.content,
-			sender_id: m.sender.id.toString(),
-			created_at: m.created_at,
-		}));
-	}
+    /**
+     * LƯU TIN NHẮN (Đã gộp và tối ưu)
+     */
+    async saveMessage(conversationId: string, senderId: string, content: string) {
+        const newMessage = this.messageRepo.create({
+            conversation: { id: Number(conversationId) } as any,
+            sender: { id: Number(senderId) } as any,
+            content,
+        });
+
+        const savedMsg = await this.messageRepo.save(newMessage);
+
+        const fullMsg = await this.messageRepo.findOne({
+            where: { id: savedMsg.id },
+            relations: ['sender'] 
+        });
+
+        return {
+            id: fullMsg?.id.toString(),
+            conversation_id: conversationId,
+            sender_id: senderId,
+    		sender_name: (fullMsg?.sender as any)?.name || (fullMsg?.sender as any)?.username || "Người dùng", 
+            content: fullMsg?.content,
+            created_at: fullMsg?.created_at,
+        };
+    }
+
+    /**
+     * Lấy lịch sử tin nhắn
+     */
+    async getConversationMessages(conversationId: string, limit = 50) {
+        const messages = await this.messageRepo.find({
+            where: { conversation: { id: Number(conversationId) } },
+            relations: ['sender'],
+            order: { created_at: 'ASC' },
+            take: limit,
+        });
+
+        return messages.map((m) => ({
+            id: m.id.toString(),
+            content: m.content,
+            sender_id: m.sender.id.toString(),
+    	sender_name: (m.sender as any)?.name || (m.sender as any)?.username || "Unknown",
+            created_at: m.created_at,
+        }));
+    }
 }
 
 export default new ChatService();

@@ -1,13 +1,18 @@
 import "reflect-metadata";
 import app from './app.js'; 
 import http from "http";
+import express from 'express';
+import authRoutes from './modules/auth/auth.route.js';
 import { AppDataSource } from "./data-source.js";
 import { Server, Socket } from "socket.io"; 
 import { chatSocket } from './modules/conversation/conversation.socket.js';
 import { notificationSocket } from './modules/notification/notification.socket.js';
 import { ensureRedisConnected, redisClient } from './core/config/redis.js';
 import { checkCloudinaryConnection } from './core/config/cloudinary.js';
+
 const PORT = 3000;
+app.use(express.json());
+app.use('/api/auth', authRoutes);
 
 // 1. Khởi tạo Database trước
 AppDataSource.initialize()

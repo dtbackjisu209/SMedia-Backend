@@ -7,9 +7,14 @@ import { AppDataSource } from "./data-source.js";
 import { Server, Socket } from "socket.io"; 
 import { chatSocket } from './modules/conversation/conversation.socket.js';
 import { notificationSocket } from './modules/notification/notification.socket.js';
-import { ensureRedisConnected, redisClient } from './core/config/redis.js';
+import {
+    ensureFanoutRedisConnected,
+    ensureQueueRedisConnected,
+    fanoutRedisClient,
+    queueRedisClient,
+} from './core/config/redis.js';
 import { checkCloudinaryConnection } from './core/config/cloudinary.js';
-
+import { startPostFeedFanoutWorker } from './modules/post/queues/post-fanout/post-fanout.worker.js';
 const PORT = 3000;
 app.use(express.json());
 app.use('/api/auth', authRoutes);
@@ -23,10 +28,16 @@ AppDataSource.initialize()
             .then(() => console.log('Cloudinary connected'))
             .catch((error) => console.error('Cloudinary connection failed:', error));
 
-        ensureRedisConnected()
+        Promise.all([ensureFanoutRedisConnected(), ensureQueueRedisConnected()])
             .then(async () => {
-                const pong = await redisClient.ping();
-                console.log(`Redis connected (${pong})`);
+                const [fanoutPong, queuePong] = await Promise.all([
+                    fanoutRedisClient.ping(),
+                    queueRedisClient.ping(),
+                ]);
+                console.log(`Redis fanout connected (${fanoutPong})`);
+                console.log(`Redis queue connected (${queuePong})`);
+                startPostFeedFanoutWorker();
+                console.log('Post feed fanout worker started');
             })
             .catch((error) => console.error('Redis connection failed:', error));
 

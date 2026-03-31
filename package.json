@@ -7,7 +7,7 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "migration:generate": "npm run build && typeorm migration:generate src/database/migrations/init -d dist/data-source.js",
+    "migration:generate": "npm run build && typeorm migration:generate -d dist/data-source.js",
     "migration:run": "typeorm migration:run -d dist/data-source.js"
   },
   "type": "module",
@@ -17,6 +17,7 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.71.1",
     "cloudinary": "^2.8.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",

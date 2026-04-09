@@ -42,15 +42,12 @@ export class ChatService {
      * CHAT NHÓM: Tạo hội thoại nhóm
      */
     async createGroupConversation(name: string, memberIds: number[]): Promise<Conversation> {
-        const newConv = this.conversationRepo.create({
-            name: name 
-        } as any);
-        
+        const newConv = this.conversationRepo.create({ name } as any);
         const savedConv = (await this.conversationRepo.save(newConv)) as any;
 
         const members = memberIds.map(id => ({
             conversation_id: savedConv.id,
-            user_id: id as any
+            user_id: id as any,
         }));
         await this.memberRepo.save(members);
 
@@ -58,17 +55,60 @@ export class ChatService {
     }
 
     /**
-     * Lấy tất cả hội thoại mà User đang tham gia
+     * Lấy tất cả hội thoại mà User đang tham gia (kèm tin nhắn cuối)
      */
     async getUserConversations(userId: number): Promise<any[]> {
-        return await this.memberRepo.find({
+        const memberships = await this.memberRepo.find({
             where: { user_id: userId as any },
-            select: ['conversation_id']
+            select: ['conversation_id'],
         });
+
+        const conversationIds = memberships.map((m: any) => m.conversation_id);
+        if (conversationIds.length === 0) return [];
+
+        const results = [];
+        for (const convId of conversationIds) {
+            const conv = await this.conversationRepo.findOne({ where: { id: convId } });
+            if (!conv) continue;
+
+            // Lấy tin nhắn cuối
+            const lastMessage = await this.messageRepo.findOne({
+                where: { conversation: { id: convId } },
+                relations: ['sender'],
+                order: { created_at: 'DESC' },
+            });
+
+            // Lấy danh sách thành viên
+            const members = await this.memberRepo.find({
+                where: { conversation_id: convId as any },
+                relations: ['user'],
+            });
+
+            results.push({
+                id: conv.id,
+                name: (conv as any).name || null,
+                type: (conv as any).name ? 'group' : 'private',
+                members: members.map((m: any) => ({
+                    user_id: m.user_id,
+                    name: m.user?.name || m.user?.username || 'Người dùng',
+                    avatar: m.user?.avatar || null,
+                })),
+                lastMessage: lastMessage
+                    ? {
+                          id: lastMessage.id,
+                          content: lastMessage.content,
+                          sender_name: (lastMessage.sender as any)?.name || 'Người dùng',
+                          created_at: lastMessage.created_at,
+                      }
+                    : null,
+            });
+        }
+
+        return results;
     }
 
     /**
-     * LƯU TIN NHẮN (Đã gộp và tối ưu)
+     * LƯU TIN NHẮN
      */
     async saveMessage(conversationId: string, senderId: string, content: string) {
         const newMessage = this.messageRepo.create({
@@ -81,35 +121,36 @@ export class ChatService {
 
         const fullMsg = await this.messageRepo.findOne({
             where: { id: savedMsg.id },
-            relations: ['sender'] 
+            relations: ['sender'],
         });
 
         return {
             id: fullMsg?.id.toString(),
             conversation_id: conversationId,
             sender_id: senderId,
-    		sender_name: (fullMsg?.sender as any)?.name || (fullMsg?.sender as any)?.username || "Người dùng", 
+            sender_name: (fullMsg?.sender as any)?.name || (fullMsg?.sender as any)?.username || 'Người dùng',
             content: fullMsg?.content,
             created_at: fullMsg?.created_at,
         };
     }
 
     /**
-     * Lấy lịch sử tin nhắn
+     * Lấy lịch sử tin nhắn (có phân trang)
      */
-    async getConversationMessages(conversationId: string, limit = 50) {
+    async getConversationMessages(conversationId: string, limit = 50, offset = 0) {
         const messages = await this.messageRepo.find({
             where: { conversation: { id: Number(conversationId) } },
             relations: ['sender'],
             order: { created_at: 'ASC' },
             take: limit,
+            skip: offset,
         });
 
-        return messages.map((m) => ({
+        return messages.map(m => ({
             id: m.id.toString(),
             content: m.content,
             sender_id: m.sender.id.toString(),
-    	sender_name: (m.sender as any)?.name || (m.sender as any)?.username || "Unknown",
+            sender_name: (m.sender as any)?.name || (m.sender as any)?.username || 'Unknown',
             created_at: m.created_at,
         }));
     }

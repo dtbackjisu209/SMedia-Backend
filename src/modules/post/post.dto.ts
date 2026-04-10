@@ -38,3 +38,73 @@ export type CloudinaryUploadSignatureDTO = {
 	signature: string;
 };
 
+export type CacheNewPostFeedInputDTO = {
+	postId: number;
+	caption: string | null;
+	location: string | null;
+	createdAt: Date;
+	likeCount: number;
+	commentCount: number;
+	thumbnail: string;
+	mediaCount: number;
+	author: FeedAuthorDTO;
+	feedUserIds: number[];
+};
+
+export type FeedPostCacheDataDTO = {
+	postId: number;
+	caption: string | null;
+	location: string | null;
+	likeCount: number;
+	commentCount: number;
+	createdAt: Date;
+	tags: string[];
+	thumbnail: string;
+	mediaCount: number;
+	author: FeedAuthorDTO;
+};
+
+export type UserInterestDTO = Record<string, number>;
+
+export type FeedAuthorDTO = {
+	id: number;
+	username: string;
+	fullName: string | null;
+	avatarUrl: string | null;
+};
+
+export type FeedMediaDTO = {
+	mediaUrl: string;
+	mediaType: 'image' | 'video';
+	position: number;
+};
+
+export type FeedItemDTO = {
+	id: number;
+	caption: string | null;
+	location: string | null;
+	created_at: Date;
+	author: FeedAuthorDTO;
+	like_count: number;
+	comment_count: number;
+	tags: string[];
+	thumbnail: string;
+	media_count: number;
+	ranking_score: number;
+};
+
+export type GetFeedResultDTO = {
+	items: FeedItemDTO[];
+};
+
+export type PostDetailDTO = {
+	id: number;
+	caption: string | null;
+	location: string | null;
+	created_at: Date;
+	author: FeedAuthorDTO;
+	media: FeedMediaDTO[];
+	like_count: number;
+	comment_count: number;
+};
+

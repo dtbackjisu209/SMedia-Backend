@@ -25,23 +25,17 @@ const parseUserId = (value: unknown): number | null => {
 };
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-	const headerUserId = parseUserId(req.header('x-user-id'));
-	if (headerUserId !== null) {
-		req.userId = headerUserId;
-		next();
-		return;
-	}
-
 	const authorization = req.header('authorization');
 	const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
+	const jwtSecret = env.jwtSecret || 'SMEDIA_SECRET';
 
-	if (!token || !env.jwtSecret) {
+	if (!token) {
 		next(new AuthFailError());
 		return;
 	}
 
 	try {
-		const payload = jwt.verify(token, env.jwtSecret) as JwtPayload | string;
+		const payload = jwt.verify(token, jwtSecret) as JwtPayload | string;
 		const userId =
 			typeof payload === 'string'
 				? parseUserId(payload)

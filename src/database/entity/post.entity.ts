@@ -18,4 +18,10 @@ export class Post {
 
   @CreateDateColumn({type: 'timestamp'})
   created_at!: Date;
+
+  @Column({ type: 'int', default: 0 })
+  like_count!: number;
+
+  @Column({ type: 'int', default: 0 })
+  comment_count!: number;
 }

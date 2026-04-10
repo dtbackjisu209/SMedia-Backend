@@ -4,6 +4,37 @@ import { CREATED, OK } from '../../core/handler/success.response.js';
 import postService from './post.service.js';
 
 class PostController {
+	public async getFeed(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		const feed = await postService.getFeed(req.userId);
+
+		new OK({
+			message: 'Feed fetched successfully',
+			data: feed,
+		}).send(res);
+	}
+
+	public async getPostDetail(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		const postId = Number(req.params.postId);
+		if (!Number.isFinite(postId) || postId <= 0) {
+			throw new BadRequestError('postId must be a positive number');
+		}
+
+		const post = await postService.getPostDetail(postId);
+
+		new OK({
+			message: 'Post detail fetched successfully',
+			data: post,
+		}).send(res);
+	}
+
 	public async getUploadSignature(req: Request, res: Response, _next: NextFunction): Promise<void> {
 		if (!req.userId) {
 			throw new AuthFailError();

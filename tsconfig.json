@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "target": "ES2020",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -14,10 +15,19 @@
     "resolveJsonModule": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "baseUrl": "./src",
+    "baseUrl": ".",
     "paths": {
-      "*": ["*"]
+      "@/*": [
+        "src/*"
+      ]
     }
   },
-  "include": ["src", "tsconfig.json"]
+  "include": [
+    "src/**/*",
+    "tsconfig.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

@@ -135,4 +135,14 @@ export const getFollowerIdsByUserId = async (userId: number): Promise<number[]> 
   return rows.map((row) => Number(row.follower_id));
 };
 
+export const getFollowingIdsByUserId = async (userId: number): Promise<number[]> => {
+  const rows = await AppDataSource.getRepository(Follow)
+    .createQueryBuilder('follow')
+    .select('follow.following_id', 'following_id')
+    .where('follow.follower_id = :userId', { userId })
+    .getRawMany<{ following_id: string }>();
+
+  return rows.map((row) => Number(row.following_id));
+};
+
 export default new FollowRepository();

@@ -2,117 +2,125 @@ import { Server, Socket } from 'socket.io';
 import { ChatService } from './conversation.service.js';
 
 const chatService = new ChatService();
- 
+
+const getOnlineUserIds = (io: Server): number[] => {
+  const roomNames = Array.from(io.sockets.adapter.rooms.keys());
+  return roomNames
+    .filter((room) => room.startsWith('user_'))
+    .map((room) => Number(room.replace('user_', '')))
+    .filter((id) => Number.isFinite(id) && id > 0);
+};
+
 export const chatSocket = (io: Server, socket: Socket) => {
+  socket.on('identify', async (userId: number) => {
+    try {
+      const normalizedUserId = Number(userId);
+      if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) return;
 
-    /**
-     * 1. SỰ KIỆN IDENTIFY 
-     */
-    socket.on('identify', async (userId: number) => {
-        try {
-            socket.join(`user_${userId}`);
+      const userRoom = `user_${normalizedUserId}`;
+      const isAlreadyOnline = (io.sockets.adapter.rooms.get(userRoom)?.size ?? 0) > 0;
 
-            const userConvs = await chatService.getUserConversations(userId);
-            
-            userConvs.forEach((conv: any) => {
-                socket.join(`conversation_${conv.conversation_id}`);
-            });
+      socket.data.userId = normalizedUserId;
+      socket.join(userRoom);
 
-            console.log(`[Socket] User ${userId} identified and joined ${userConvs.length} rooms`);
-        } catch (error) {
-            console.error('[Socket Error] identify:', error);
-        }
-    });
+      const userConvs = await chatService.getUserConversations(normalizedUserId);
+      userConvs.forEach((conv: any) => {
+        socket.join(`conversation_${conv.id}`);
+      });
 
-    /**
-     * 2. CHAT 1-1: THAM GIA HOẶC TẠO CHAT RIÊNG
-     */
-    socket.on('join_private_chat', async (data: { myId: number; targetUserId: number }) => {
-        try {
-            const conversationId = await chatService.getOrCreateConversation(data.myId, data.targetUserId);
-            const roomName = `conversation_${conversationId}`;
-            
-            socket.join(roomName);
-            
-            socket.emit('joined_room', { conversationId, type: 'private' });
-            console.log(`[Socket] User ${data.myId} joined private chat: ${roomName}`);
-        } catch (error) {
-            console.error('[Socket Error] join_private_chat:', error);
-            socket.emit('error', 'Không thể tham gia phòng chat riêng');
-        }
-    });
+      socket.emit('presence_snapshot', { onlineUserIds: getOnlineUserIds(io) });
 
-    /**
-     * 3. CHAT NHÓM: TẠO NHÓM MỚI 
-     */
-    socket.on('create_group_chat', async (data: { name: string; memberIds: number[] }) => {
-        try {
-            // 1. Lưu nhóm vào Database
-            const newGroup = await chatService.createGroupConversation(data.name, data.memberIds);
-            const groupRoom = `conversation_${newGroup.id}`;
-            
-            // 2. PHẦN QUAN TRỌNG: Tự động "kéo" mọi người vào Room ngay lập tức
-            data.memberIds.forEach((userId: number) => {
-                // Lệnh này bắt tất cả socket đang Online của User đó Join vào Room nhóm
-                io.in(`user_${userId}`).socketsJoin(groupRoom);
+      if (!isAlreadyOnline) {
+        io.emit('user_presence_changed', { userId: normalizedUserId, isOnline: true });
+        io.emit('presence_snapshot', { onlineUserIds: getOnlineUserIds(io) });
+      }
 
-                // Sau đó gửi thông báo "Có nhóm mới" cho họ
-                io.to(`user_${userId}`).emit('new_group_created', {
-                    conversationId: newGroup.id,
-                    name: data.name
-                });
-            });
+      console.log(`[Socket] User ${normalizedUserId} identified and joined ${userConvs.length} rooms`);
+    } catch (error) {
+      console.error('[Socket Error] identify:', error);
+    }
+  });
 
-            // 3. Người tạo cũng join vào (đã được xử lý ở vòng lặp trên nhưng cứ chắc chắn)
-            socket.join(groupRoom);
-            socket.emit('joined_room', { conversationId: newGroup.id, type: 'group' });
-            
-            console.log(`[Socket] Group ${data.name} created. All members automatically joined room ${groupRoom}`);
-        } catch (error) {
-            console.error('[Socket Error] create_group_chat:', error);
-            socket.emit('error', 'Lỗi khi tạo nhóm chat');
-        }
-    });
-    /**
-     * 4. GỬI TIN NHẮN 
-     */
-    socket.on('send_message', async (data: { conversationId: string; senderId: string; content: string }) => {
-        try {
-            if (!data.content || !data.content.trim()) return;
+  socket.on('join_private_chat', async (data: { myId: number; targetUserId: number }) => {
+    try {
+      const conversationId = await chatService.getOrCreateConversation(data.myId, data.targetUserId);
+      const roomName = `conversation_${conversationId}`;
 
-            // 1. Lưu tin nhắn vào Database
-            const savedMsg = await chatService.saveMessage(
-                data.conversationId,
-                data.senderId,
-                data.content
-            );
+      socket.join(roomName);
+      io.in(`user_${data.targetUserId}`).socketsJoin(roomName);
 
-            // 2. Phát tin nhắn đến toàn bộ người trong phòng hội thoại
-            const roomName = `conversation_${data.conversationId}`;
-            io.to(roomName).emit('new_message', savedMsg);
-            
-            console.log(`[Socket] Message sent in ${roomName} by User ${data.senderId}`);
-        } catch (error) {
-            console.error('[Socket Error] send_message:', error);
-            socket.emit('error', 'Không thể gửi tin nhắn');
-        }
-    });
+      socket.emit('joined_room', { conversationId, type: 'private' });
+      console.log(`[Socket] User ${data.myId} joined private chat: ${roomName}`);
+    } catch (error) {
+      console.error('[Socket Error] join_private_chat:', error);
+      socket.emit('error', 'Could not join private chat room');
+    }
+  });
 
-    /**
-     * 5. HIỆU ỨNG TYPING (Đang soạn tin nhắn)
-     */
-    socket.on('typing', (data: { conversationId: string; senderName: string }) => {
-        const roomName = `conversation_${data.conversationId}`;
-        socket.to(roomName).emit('user_typing', {
-            message: `${data.senderName} đang soạn tin nhắn...`
+  socket.on('create_group_chat', async (data: { name: string; memberIds: number[] }) => {
+    try {
+      const newGroup = await chatService.createGroupConversation(data.name, data.memberIds);
+      const groupRoom = `conversation_${newGroup.id}`;
+
+      data.memberIds.forEach((userId: number) => {
+        io.in(`user_${userId}`).socketsJoin(groupRoom);
+        io.to(`user_${userId}`).emit('new_group_created', {
+          conversationId: newGroup.id,
+          name: data.name,
         });
-    });
+      });
 
-    /**
-     * 6. DỪNG SOẠN TIN NHẮN
-     */
-    socket.on('stop_typing', (data: { conversationId: string }) => {
-        const roomName = `conversation_${data.conversationId}`;
-        socket.to(roomName).emit('user_stop_typing');
+      socket.join(groupRoom);
+      socket.emit('joined_room', { conversationId: newGroup.id, type: 'group' });
+
+      console.log(`[Socket] Group ${data.name} created, room ${groupRoom}`);
+    } catch (error) {
+      console.error('[Socket Error] create_group_chat:', error);
+      socket.emit('error', 'Could not create group chat');
+    }
+  });
+
+  socket.on('send_message', async (data: { conversationId: string; senderId: string; content: string }) => {
+    try {
+      if (!data.content || !data.content.trim()) return;
+
+      const savedMsg = await chatService.saveMessage(data.conversationId, data.senderId, data.content);
+      const roomName = `conversation_${data.conversationId}`;
+      io.to(roomName).emit('new_message', savedMsg);
+
+      console.log(`[Socket] Message sent in ${roomName} by User ${data.senderId}`);
+    } catch (error) {
+      console.error('[Socket Error] send_message:', error);
+      socket.emit('error', 'Could not send message');
+    }
+  });
+
+  socket.on('typing', (data: { conversationId: string; senderName: string }) => {
+    const roomName = `conversation_${data.conversationId}`;
+    socket.to(roomName).emit('user_typing', {
+      message: `${data.senderName} is typing...`,
     });
+  });
+
+  socket.on('stop_typing', (data: { conversationId: string }) => {
+    const roomName = `conversation_${data.conversationId}`;
+    socket.to(roomName).emit('user_stop_typing');
+  });
+
+  socket.on('request_presence_snapshot', () => {
+    socket.emit('presence_snapshot', { onlineUserIds: getOnlineUserIds(io) });
+  });
+
+  socket.on('disconnect', () => {
+    const userId = Number(socket.data.userId);
+    if (!Number.isFinite(userId) || userId <= 0) return;
+
+    setTimeout(() => {
+      const stillOnline = (io.sockets.adapter.rooms.get(`user_${userId}`)?.size ?? 0) > 0;
+      if (!stillOnline) {
+        io.emit('user_presence_changed', { userId, isOnline: false });
+        io.emit('presence_snapshot', { onlineUserIds: getOnlineUserIds(io) });
+      }
+    }, 0);
+  });
 };

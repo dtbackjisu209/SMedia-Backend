@@ -1,3 +1,38 @@
-class StoryController {}
+import type { NextFunction, Request, Response } from 'express';
+import { BadRequestError, AuthFailError } from '../../core/handler/error.response.js';
+import { CREATED, OK } from '../../core/handler/success.response.js';
+import storyService from './story.service.js';
+
+class StoryController {
+	public async createStory(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		if (!req.file) {
+			throw new BadRequestError('Story media is required');
+		}
+
+		const story = await storyService.createStory(req.userId, req.file);
+
+		new CREATED({
+			message: 'Story published successfully',
+			data: story,
+		}).send(res);
+	}
+
+	public async getStoryFeed(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		const stories = await storyService.getStoryFeed(req.userId);
+
+		new OK({
+			message: 'Fetch story feed successfully',
+			data: stories,
+		}).send(res);
+	}
+}
 
 export default new StoryController();

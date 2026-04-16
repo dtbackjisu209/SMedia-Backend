@@ -6,6 +6,7 @@ import type {
 	PostDetailDTO,
 } from './post.dto.js';
 import { NotFoundError } from '../../core/handler/error.response.js';
+import { Hashtag } from '../../database/entity/hashtag.entity.js';
 import { Post } from '../../database/entity/post.entity.js';
 import { PostMedia } from '../../database/entity/postMedia.entity.js';
 import { User } from '../../database/entity/user.entity.js';
@@ -137,6 +138,19 @@ class PostRepository {
 		};
 	}
 
+	public async getTagsByPostId(postId: number): Promise<string[]> {
+		const rows = await AppDataSource.getRepository(Hashtag)
+			.createQueryBuilder('hashtag')
+			.innerJoin('post_hashtags', 'postHashtag', 'postHashtag.hashtag_id = hashtag.id')
+			.select('hashtag.name', 'name')
+			.where('postHashtag.post_id = :postId', { postId })
+			.getRawMany<{ name: string }>();
+
+		return rows
+			.map((row) => row.name.trim().toLowerCase())
+			.filter((tag) => tag.length > 0);
+	}
+
 	public async getFeedCacheDataByPostIds(postIds: number[]): Promise<FeedPostCacheDataDTO[]> {
 		if (postIds.length === 0) {
 			return [];
@@ -228,6 +242,36 @@ class PostRepository {
 				},
 			};
 		});
+	}
+
+	public async getRecentFeedCacheDataByAuthorId(
+		authorUserId: number,
+		limit: number,
+	): Promise<FeedPostCacheDataDTO[]> {
+		const safeLimit = Math.max(1, Math.min(limit, 10));
+
+		const rows = await AppDataSource.getRepository(Post)
+			.createQueryBuilder('post')
+			.select('post.id', 'id')
+			.where('post.user_id = :authorUserId', { authorUserId })
+			.orderBy('post.created_at', 'DESC')
+			.limit(safeLimit)
+			.getRawMany<{ id: string }>();
+
+		const orderedPostIds = rows
+			.map((row) => Number(row.id))
+			.filter((id) => Number.isFinite(id));
+
+		if (orderedPostIds.length === 0) {
+			return [];
+		}
+
+		const posts = await this.getFeedCacheDataByPostIds(orderedPostIds);
+		const postsById = new Map(posts.map((post) => [post.postId, post]));
+
+		return orderedPostIds
+			.map((postId) => postsById.get(postId))
+			.filter((post): post is FeedPostCacheDataDTO => Boolean(post));
 	}
 }
 

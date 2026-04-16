@@ -15,6 +15,7 @@ import {
 } from './core/config/redis.js';
 import { checkCloudinaryConnection } from './core/config/cloudinary.js';
 import { startPostFeedFanoutWorker } from './modules/post/queues/post-fanout/post-fanout.worker.js';
+import { startUserInteractionWorker } from './modules/post/queues/user-interaction/user-interaction.worker.js';
 const PORT = 3000;
 app.use(express.json());
 app.use('/api/auth', authRoutes);
@@ -38,6 +39,8 @@ AppDataSource.initialize()
                 console.log(`Redis queue connected (${queuePong})`);
                 startPostFeedFanoutWorker();
                 console.log('Post feed fanout worker started');
+                startUserInteractionWorker();
+                console.log('User interaction worker started');
             })
             .catch((error) => console.error('Redis connection failed:', error));
 

@@ -6,6 +6,8 @@ import { FollowRequest } from '../../database/entity/followRequest.entity.js';
 import { Notification } from '../../database/entity/notification.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 import followRepository from './follow.repository.js';
+import postRepository from '../post/post.repository.js';
+import postRedisService from '../post/redis/post.redis.service.js';
 import type {
   FollowActionResult,
   FollowUserSummary,
@@ -15,6 +17,7 @@ import type {
 import { normalizePagination } from './follow.dto.js';
 
 const CACHE_TTL_SECONDS = 120;
+const FOLLOW_FEED_WARMUP_LIMIT = 10;
 
 const followerCountKey = (userId: number) => `follow:count:followers:${userId}`;
 const followingCountKey = (userId: number) => `follow:count:following:${userId}`;
@@ -85,6 +88,23 @@ class FollowService {
     return user;
   }
 
+  private async warmFollowerFeedAfterFollow(followerUserId: number, followedUserId: number): Promise<void> {
+    try {
+      const recentPosts = await postRepository.getRecentFeedCacheDataByAuthorId(
+        followedUserId,
+        FOLLOW_FEED_WARMUP_LIMIT,
+      );
+
+      if (recentPosts.length === 0) {
+        return;
+      }
+
+      await postRedisService.warmFeedWithRecentPosts(followerUserId, recentPosts);
+    } catch (error) {
+      console.error('[follow] feed warmup failed:', error);
+    }
+  }
+
   async follow(currentUserId: number, targetUserId: number): Promise<FollowActionResult> {
     if (!Number.isFinite(currentUserId) || !Number.isFinite(targetUserId)) {
       throw new BadRequestError('Invalid user id');
@@ -135,6 +155,7 @@ class FollowService {
       });
 
       await this.invalidateCountCache([currentUser.id, targetUser.id]);
+      await this.warmFollowerFeedAfterFollow(currentUser.id, targetUser.id);
 
       return {
         mode: 'followed',
@@ -283,6 +304,7 @@ class FollowService {
     });
 
     await this.invalidateCountCache([currentUserId, requesterId]);
+    await this.warmFollowerFeedAfterFollow(requesterId, currentUserId);
 
     return {
       mode: 'accepted',

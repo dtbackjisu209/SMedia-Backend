@@ -159,6 +159,42 @@ class PostRedisService {
 		);
 	}
 
+	public async warmFeedWithRecentPosts(userId: number, posts: FeedPostCacheDataDTO[]): Promise<void> {
+		if (posts.length === 0) {
+			return;
+		}
+
+		await ensureRedisConnected();
+
+		const pipeline = redisClient.multi();
+		for (const post of posts) {
+			pipeline.hSet(postRedisKeys.postData(post.postId), {
+				caption: post.caption ?? '',
+				location: post.location ?? '',
+				like_count: String(post.likeCount),
+				comment_count: String(post.commentCount),
+				created_at: post.createdAt.toISOString(),
+				tags: JSON.stringify(post.tags),
+				thumbnail: post.thumbnail,
+				media_count: String(post.mediaCount),
+				author_id: String(post.author.id),
+				author_username: post.author.username,
+				author_full_name: post.author.fullName ?? '',
+				author_avatar_url: post.author.avatarUrl ?? '',
+			});
+
+			pipeline.zAdd(postRedisKeys.feed(userId), {
+				score: post.createdAt.getTime(),
+				value: String(post.postId),
+			});
+		}
+
+		// Keep newest 100 posts after merge, preserving old feed entries.
+		pipeline.zRemRangeByRank(postRedisKeys.feed(userId), 0, -101);
+
+		await pipeline.exec();
+	}
+
 	public async getUserInterest(userId: number): Promise<UserInterestDTO> {
 		await ensureRedisConnected();
 
@@ -183,6 +219,50 @@ class PostRedisService {
 		}
 
 		return normalized;
+	}
+
+	public async incrementUserInterest(
+		userId: number,
+		tags: string[],
+		delta: number,
+	): Promise<void> {
+		if (delta <= 0 || tags.length === 0) {
+			return;
+		}
+
+		const normalizedTags = [...new Set(
+			tags.map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0),
+		)];
+		if (normalizedTags.length === 0) {
+			return;
+		}
+
+		await ensureRedisConnected();
+
+		const pipeline = redisClient.multi();
+		for (const tag of normalizedTags) {
+			pipeline.hIncrByFloat(postRedisKeys.userInterest(userId), tag, delta);
+		}
+
+		await pipeline.exec();
+	}
+
+	public async rebuildFromDB(userId: number, interests: UserInterestDTO): Promise<void> {
+		await ensureRedisConnected();
+
+		const entries = Object.entries(interests)
+			.map(([tag, score]) => [tag.trim().toLowerCase(), score] as const)
+			.filter(([tag, score]) => tag.length > 0 && Number.isFinite(score) && score > 0);
+
+		const key = postRedisKeys.userInterest(userId);
+		const pipeline = redisClient.multi();
+		pipeline.del(key);
+
+		for (const [tag, score] of entries) {
+			pipeline.hSet(key, tag, String(score));
+		}
+
+		await pipeline.exec();
 	}
 
 	private toNumber(value: string | undefined): number {

@@ -18,6 +18,7 @@ import {
   Notification,
   Story,
   StoryView,
+  UserInteraction,
   UserBlock,
 } from './database/entity/index.js';
 
@@ -42,6 +43,7 @@ entities: [
   Notification,
   Story,
   StoryView,
+  UserInteraction,
   UserBlock,
 ],
 

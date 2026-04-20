@@ -3,7 +3,6 @@ import { BadRequestError, ConflictRequestError, NotFoundError } from '../../core
 import { ensureRedisConnected, redisClient } from '../../core/config/redis.js';
 import { Follow } from '../../database/entity/follow.entity.js';
 import { FollowRequest } from '../../database/entity/followRequest.entity.js';
-import { Notification } from '../../database/entity/notification.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 import followRepository from './follow.repository.js';
 import postRepository from '../post/post.repository.js';
@@ -15,6 +14,7 @@ import type {
   FollowListQuery,
 } from './follow.dto.js';
 import { normalizePagination } from './follow.dto.js';
+import notificationService from '../notification/notification.service.js';
 
 const CACHE_TTL_SECONDS = 120;
 const FOLLOW_FEED_WARMUP_LIMIT = 10;
@@ -130,10 +130,11 @@ class FollowService {
     }
 
     if (!targetUser.is_private) {
+      let createdNotification: Awaited<ReturnType<typeof notificationService.createNotification>> | null = null;
+
       await AppDataSource.transaction(async (manager) => {
         const followRepo = manager.getRepository(Follow);
         const requestRepo = manager.getRepository(FollowRequest);
-        const notificationRepo = manager.getRepository(Notification);
 
         await followRepo.save(
           followRepo.create({
@@ -144,15 +145,20 @@ class FollowService {
 
         await requestRepo.delete({ requester_id: currentUser.id, target_user_id: targetUser.id });
 
-        await notificationRepo.save(
-          notificationRepo.create({
-            user: { id: targetUser.id } as User,
+        createdNotification = await notificationService.createNotification(
+          {
+            userId: targetUser.id,
             type: 'follow',
-            reference_id: currentUser.id,
-            is_read: false,
-          }),
+            referenceId: currentUser.id,
+            content: `${currentUser.full_name || currentUser.username} started following you.`,
+          },
+          { manager, emit: false },
         );
       });
+
+      if (createdNotification) {
+        notificationService.emitNotification(targetUser.id, createdNotification);
+      }
 
       await this.invalidateCountCache([currentUser.id, targetUser.id]);
       await this.warmFollowerFeedAfterFollow(currentUser.id, targetUser.id);
@@ -163,9 +169,10 @@ class FollowService {
       };
     }
 
+    let createdNotification: Awaited<ReturnType<typeof notificationService.createNotification>> | null = null;
+
     await AppDataSource.transaction(async (manager) => {
       const requestRepo = manager.getRepository(FollowRequest);
-      const notificationRepo = manager.getRepository(Notification);
 
       const existingRequest = await requestRepo.findOne({
         where: {
@@ -187,15 +194,20 @@ class FollowService {
         );
       }
 
-      await notificationRepo.save(
-        notificationRepo.create({
-          user: { id: targetUser.id } as User,
-          type: 'follow',
-          reference_id: currentUser.id,
-          is_read: false,
-        }),
+      createdNotification = await notificationService.createNotification(
+        {
+          userId: targetUser.id,
+          type: 'follow_request',
+          referenceId: currentUser.id,
+          content: `${currentUser.full_name || currentUser.username} requested to follow you.`,
+        },
+        { manager, emit: false },
       );
     });
+
+    if (createdNotification) {
+      notificationService.emitNotification(targetUser.id, createdNotification);
+    }
 
     return {
       mode: 'requested',
@@ -255,12 +267,16 @@ class FollowService {
       throw new BadRequestError('Invalid follow request');
     }
 
-    await Promise.all([this.ensureUserExists(currentUserId), this.ensureUserExists(requesterId)]);
+    const [currentUser] = await Promise.all([
+      this.ensureUserExists(currentUserId),
+      this.ensureUserExists(requesterId),
+    ]);
+
+    let createdNotification: Awaited<ReturnType<typeof notificationService.createNotification>> | null = null;
 
     await AppDataSource.transaction(async (manager) => {
       const followRepo = manager.getRepository(Follow);
       const requestRepo = manager.getRepository(FollowRequest);
-      const notificationRepo = manager.getRepository(Notification);
 
       const request = await requestRepo.findOne({
         where: {
@@ -293,15 +309,20 @@ class FollowService {
       request.status = 'accepted';
       await requestRepo.save(request);
 
-      await notificationRepo.save(
-        notificationRepo.create({
-          user: { id: requesterId } as User,
-          type: 'follow',
-          reference_id: currentUserId,
-          is_read: false,
-        }),
+      createdNotification = await notificationService.createNotification(
+        {
+          userId: requesterId,
+          type: 'follow_accept',
+          referenceId: currentUserId,
+          content: `${currentUser.full_name || currentUser.username} accepted your follow request.`,
+        },
+        { manager, emit: false },
       );
     });
+
+    if (createdNotification) {
+      notificationService.emitNotification(requesterId, createdNotification);
+    }
 
     await this.invalidateCountCache([currentUserId, requesterId]);
     await this.warmFollowerFeedAfterFollow(requesterId, currentUserId);

@@ -15,9 +15,11 @@ import {
 } from './core/config/redis.js';
 import { checkCloudinaryConnection } from './core/config/cloudinary.js';
 import { startPostFeedFanoutWorker } from './modules/post/queues/post-fanout/post-fanout.worker.js';
+import storyRouter from './modules/story/story.route.js';
 const PORT = 3000;
 app.use(express.json());
 app.use('/api/auth', authRoutes);
+app.use('/api/stories', storyRouter);
 
 // 1. Khởi tạo Database trước
 AppDataSource.initialize()

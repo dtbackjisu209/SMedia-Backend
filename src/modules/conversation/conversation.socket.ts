@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './conversation.service.js';
+import notificationService from '../notification/notification.service.js';
 
 const chatService = new ChatService();
 
@@ -87,6 +88,22 @@ export const chatSocket = (io: Server, socket: Socket) => {
       const savedMsg = await chatService.saveMessage(data.conversationId, data.senderId, data.content);
       const roomName = `conversation_${data.conversationId}`;
       io.to(roomName).emit('new_message', savedMsg);
+
+      const senderId = Number(data.senderId);
+      const memberIds = await chatService.getConversationMemberIds(data.conversationId);
+      const recipientIds = memberIds.filter((memberId) => memberId !== senderId);
+      const preview = data.content.trim().slice(0, 80);
+
+      await Promise.all(
+        recipientIds.map((recipientId) =>
+          notificationService.createNotification({
+            userId: recipientId,
+            type: 'message',
+            referenceId: Number(data.conversationId),
+            content: `${savedMsg.sender_name} sent you a message: ${preview}`,
+          }),
+        ),
+      );
 
       console.log(`[Socket] Message sent in ${roomName} by User ${data.senderId}`);
     } catch (error) {

@@ -1,6 +1,19 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { User } from './user.entity.js';
 
+export const notificationTypes = [
+  'like',
+  'comment',
+  'follow',
+  'follow_request',
+  'follow_accept',
+  'message',
+  'mention',
+  'story_view',
+] as const;
+
+export type NotificationType = (typeof notificationTypes)[number];
+
 @Entity('notifications')
 export class Notification {
 
@@ -13,12 +26,15 @@ export class Notification {
 
   @Column({
     type: 'enum',
-    enum: ['like', 'comment', 'follow', 'mention', 'story_view'],
+    enum: notificationTypes,
   })
-  type!: string;
+  type!: NotificationType;
+
+  @Column({ type: 'text', nullable: true })
+  content!: string | null;
 
   @Column({ type: 'bigint', nullable: true })
-  reference_id!: number;
+  reference_id!: number | null;
 
   @Column({ type: 'boolean', default: false })
   is_read!: boolean;

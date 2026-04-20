@@ -259,6 +259,20 @@ export class ChatService {
       },
     };
   }
+
+  async getConversationMemberIds(conversationId: string | number): Promise<number[]> {
+    const normalizedConversationId = Number(conversationId);
+    if (!Number.isFinite(normalizedConversationId) || normalizedConversationId <= 0) return [];
+
+    const members = await this.memberRepo.find({
+      where: { conversation_id: normalizedConversationId as any },
+      select: ['user_id'],
+    });
+
+    return members
+      .map((member: any) => Number(member.user_id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+  }
 }
 
 export default new ChatService();

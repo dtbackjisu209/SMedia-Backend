@@ -15,9 +15,13 @@ export class FollowRepository {
   private followRequestRepo = AppDataSource.getRepository(FollowRequest);
   private notificationRepo = AppDataSource.getRepository(Notification);
 
-  findUserById(userId: number) {
-    return this.userRepo.findOne({ where: { id: userId } });
+  async findUserById(userId: number) {
+  const user = await this.userRepo.findOne({ where: { id: userId } });
+  if (user) {
+    user.id = Number(user.id); // Thêm dòng này để ép kiểu ID về number
   }
+  return user;
+}
 
   findFollow(followerId: number, followingId: number) {
     return this.followRepo.findOne({ where: { follower_id: followerId, following_id: followingId } });
@@ -38,6 +42,7 @@ export class FollowRepository {
       },
     });
   }
+  
 
   async saveFollow(followerId: number, followingId: number) {
     const follow = this.followRepo.create({
@@ -136,3 +141,4 @@ export const getFollowerIdsByUserId = async (userId: number): Promise<number[]> 
 };
 
 export default new FollowRepository();
+

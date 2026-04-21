@@ -1,0 +1,50 @@
+*   [33m67201a1[m[33m ([m[1;35mrefs/stash[m[33m)[m WIP on feat/notification: 49d48fd update notification for conversation
+[31m|[m[32m\[m  
+[31m|[m * [33m8279b16[m index on feat/notification: 49d48fd update notification for conversation
+[31m|[m[31m/[m  
+* [33m49d48fd[m[33m ([m[1;31morigin/feat/notification[m[33m, [m[1;32mfeat/notification[m[33m)[m update notification for conversation
+* [33m19a7ef5[m[33m ([m[1;31morigin/feat/user-profile[m[33m, [m[1;32mfeat/user-profile[m[33m)[m feat: add user profile
+* [33med66747[m[33m ([m[1;31morigin/feature/group-chat-logic[m[33m, [m[1;32mfeature/group-chat-logic[m[33m)[m update chat logic
+*   [33m2892d70[m Merge branch 'dev' of https://github.com/dtbackjisu209/SMedia-Backend into feature/group-chat-logic
+[33m|[m[34m\[m  
+[33m|[m *   [33m7557725[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature/follow-user[m[33m, [m[1;31morigin/dev[m[33m)[m Merge pull request #10 from dtbackjisu209/feature/follow-user
+[33m|[m [35m|[m[36m\[m  
+[33m|[m [35m|[m * [33m431e55e[m[33m ([m[1;31morigin/feature/follow-user[m[33m, [m[1;32mfeat/notifycation[m[33m)[m feat: implement user search feature
+[33m|[m [35m|[m * [33m1cf0714[m feat: implement follow user feature
+* [35m|[m [36m|[m [33m55a0e27[m Merge branch 'dev' of https://github.com/dtbackjisu209/SMedia-Backend into feature/group-chat-logic
+[36m|[m[35m\[m[35m|[m [36m|[m 
+[36m|[m [35m|[m[36m/[m  
+[36m|[m[36m/[m[35m|[m   
+[36m|[m *   [33mc00e6a0[m Merge pull request #9 from dtbackjisu209/feature/group-chat-logic
+[36m|[m [1;33m|[m[1;34m\[m  
+* [1;33m|[m [1;34m|[m [33m45130bd[m EscMerge branch 'dev' of https://github.com/dtbackjisu209/SMedia-Backend into feature/group-chat-logic
+[1;34m|[m[1;33m\[m[1;33m|[m [1;34m|[m 
+[1;34m|[m [1;33m|[m[1;34m/[m  
+[1;34m|[m[1;34m/[m[1;33m|[m   
+[1;34m|[m *   [33m2909da1[m[33m ([m[1;32mdev[m[33m)[m Merge pull request #8 from dtbackjisu209/fix/auth-middleware-and-config
+[1;34m|[m [31m|[m[32m\[m  
+[1;34m|[m [31m|[m * [33m3a8118b[m[33m ([m[1;31morigin/fix/auth-middleware-and-config[m[33m)[m fix(auth): improve auth middleware and update config
+[1;34m|[m * [32m|[m [33m19de3f1[m Merge pull request #7 from dtbackjisu209/feature/feed-fanout-redis-queue
+[1;34m|[m [33m|[m[32m\[m[32m|[m 
+[1;34m|[m [33m|[m * [33m409d536[m[33m ([m[1;31morigin/feature/feed-fanout-redis-queue[m[33m)[m feat: implement feed with redis + queue + fanout
+[1;34m|[m [33m|[m[33m/[m  
+[1;34m|[m *   [33m3a8ec71[m Merge pull request #6 from dtbackjisu209/feature/auth-login
+[1;34m|[m [35m|[m[36m\[m  
+[1;34m|[m [35m|[m * [33m3651a82[m[33m ([m[1;31morigin/feature/auth-login[m[33m, [m[1;32mfeature/auth-login[m[33m)[m feat: implement login with JWT
+[1;34m|[m [35m|[m[35m/[m  
+[1;34m|[m *   [33m4213356[m Merge pull request #4 from dtbackjisu209/feature/group-chat-logic
+[1;34m|[m [1;31m|[m[1;32m\[m  
+* [1;31m|[m [1;32m|[m [33m1baa296[m update: save current work
+* [1;31m|[m [1;32m|[m [33m33773f1[m refactor: restructure conversation & conversationMember modules
+[1;32m|[m [1;31m|[m[1;32m/[m  
+[1;32m|[m[1;32m/[m[1;31m|[m   
+* [1;31m|[m [33mdd26e1e[m feat: implement group chat logic and socket event handlers
+[1;31m|[m[1;31m/[m  
+* [33m5e9aaae[m[33m ([m[1;31morigin/refactor/module-structure[m[33m)[m refactor: reorganize project structure into modular architecture
+* [33mb40b3bd[m[33m ([m[1;31morigin/feature/postmedia-upload[m[33m)[m feat(post): add post media upload functionality
+*   [33m9ca45c9[m Merge pull request #2 from dtbackjisu209/Thanhphuc
+[1;33m|[m[1;34m\[m  
+[1;33m|[m * [33m1870e04[m feat: add realtime chat feature using websocket
+[1;33m|[m[1;33m/[m  
+* [33m7d9163c[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m feat: initialize instagram clone backend
+* [33mc7fe200[m Initial commit

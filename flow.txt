@@ -13,125 +13,108 @@ Frontend upload file trực tiếp ─────────────► Cl
          ▼
 Frontend POST /api/posts ───────────────────► Backend lưu metadata + Redis feed
 
-D. Cách 2: Request Coalescing (Xịn hơn)🔒 3. Cách 1: Redis Lock🥇 1. Anti-stampede (singleflight / Redis lock) — impact lớn nhất so sánh 3 cách này
+User request feed
+       │
+       ▼
+getFeedPostIds()  ──→  Redis Sorted Set (feed:<userId>)
+       │                    [postId₁, postId₂, ...]
+       ▼
+getPostCacheDataBatch()  ──→  Redis Hash (post:<postId>)
+       │                           {caption, thumbnail, ...}
+       │ cache miss?
+       ▼
+   Query DB  ──→  cachePostCacheDataBatch()  ──→  Redis
 
-Bạn đang nhắc tới 3 “cách” nhưng thực ra là 2 tầng khác nhau:
 
-Request Coalescing (singleflight) → trong 1 instance
-Redis Lock → giữa nhiều instance
-Anti-stampede → khái niệm tổng (dùng 1 hoặc kết hợp cả 2)
+============================================================
+POST INTERACTION FLOW (IMPLEMENTED)
+============================================================
 
-Mình so sánh rõ để bạn không bị lẫn:
+1) LIKE FLOW
 
-🧠 1. Nhìn đúng bản chất
-Anti-stampede = chiến lược (goal)
-├── Request Coalescing (singleflight) → local
-└── Redis Lock → distributed
+Client
+  POST /api/v1/post-likes/:postId
+  │
+  ▼
+postLike.route -> authMiddleware -> postLike.controller.likePost
+  │
+  ▼
+postLike.service.likePost(userId, postId)
+  │
+  ├── (A) postLike.repository.likePost
+  │       ├── INSERT post_likes(user_id, post_id)
+  │       └── UPDATE posts SET like_count = like_count + 1
+  │
+  └── (B) enqueueUserInteraction(userId, postId, 'like', tags)
+     │
+     ▼
+       BullMQ queue: user-interaction
+     │
+     ▼
+       user-interaction.worker
+     │
+     ▼
+       user-interaction.processor
+     ├── INSERT user_interactions(user_id, post_id, type, tag_snapshot)
+     └── Redis HINCRBYFLOAT user:interest:<userId> <tag> +1.0
 
-👉 Tức là:
 
-Coalescing và Redis lock KHÔNG phải đối thủ
-Chúng bổ sung nhau
-🔁 2. Request Coalescing (Singleflight)
-💡 Bản chất
-Gom nhiều request cùng key → 1 promise duy nhất
-Các request khác → await chung
-🧪 Thực tế
-Server A:
-100 request → 1 DB query ✅
+2) UNLIKE FLOW
 
-Server B:
-100 request → 1 DB query ✅
+Client
+  DELETE /api/v1/post-likes/:postId
+  │
+  ▼
+postLike.route -> authMiddleware -> postLike.controller.unlikePost
+  │
+  ▼
+postLike.service.unlikePost(userId, postId)
+  │
+  ▼
+postLike.repository.unlikePost
+  ├── DELETE FROM post_likes WHERE user_id = ? AND post_id = ?
+  └── UPDATE posts
+        SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END
 
-👉 Nhưng tổng:
+NOTE:
+- Unlike currently does NOT push queue event.
+- So Redis interest score is not decreased in realtime flow.
 
-2 server → 2 query DB
-✅ Ưu điểm
-Siêu nhanh (memory)
-Không cần Redis round-trip
-Code gọn
-❌ Nhược
-Không cross-instance
-Scale ngang → mất tác dụng một phần
-🔒 3. Redis Lock
-💡 Bản chất
-Dùng Redis làm “mutex toàn hệ thống”
-Chỉ 1 instance được query DB
-🧪 Thực tế
-Server A: acquire lock → query DB
-Server B: fail lock → wait
-Server C: fail lock → wait
 
-→ chỉ 1 query DB toàn hệ thống ✅
-✅ Ưu điểm
-Cross-instance
-Chặn spike cực mạnh
-❌ Nhược
-Chậm hơn (network Redis)
-Phải retry / polling
-Có risk lock expire / deadlock (nếu code dở)
-🥇 4. Anti-stampede (ý nghĩa thật)
+3) COMMENT FLOW
 
-👉 Đây KHÔNG phải 1 kỹ thuật cụ thể
-👉 Nó là mục tiêu hệ thống:
+Client
+  POST /comments (payload: userId, postId, content, parentId?)
+  │
+  ▼
+comment.service.createComment
+  │
+  ├── (A) comment.repository.createComment
+  │       ├── INSERT comments(...)
+  │       └── UPDATE posts SET comment_count = comment_count + 1
+  │
+  └── (B) enqueueUserInteraction(userId, postId, 'comment', tags)
+     │
+     ▼
+       user-interaction.worker -> user-interaction.processor
+     ├── INSERT user_interactions(..., type='comment', ...)
+     └── Redis HINCRBYFLOAT user:interest:<userId> <tag> +2.0
 
-Cache miss → chỉ 1 nhóm nhỏ request đi DB
-⚔️ 5. So sánh trực diện
-Tiêu chí	Coalescing	Redis Lock	Anti-stampede
-Loại	Technique	Technique	Strategy
-Scope	1 server	Multi server	Toàn hệ
-Số query DB	~N server	1	1 (ideal)
-Latency	🔥 thấp nhất	cao hơn	phụ thuộc
-Complexity	thấp	trung bình	design-level
-Failure risk	thấp	có (lock expire)	—
-📊 6. Impact thực tế (rất quan trọng)
-❌ Chỉ dùng Coalescing
-10 server × 1 query = 10 query DB
-→ vẫn có spike
-❌ Chỉ dùng Redis Lock
-10k request → 1 query
-NHƯNG:
-→ tất cả request phải hit Redis
-→ latency tăng
-✅ Dùng cả 2 (chuẩn production)
-Server A:
-  100 request → 1 promise (coalescing)
 
-10 server:
-  → 10 promise → Redis lock → còn 1 DB query
+============================================================
+DATA OWNERSHIP
+============================================================
 
-=> tối ưu cả local + global
-🚀 7. Flow chuẩn (rất đáng nhớ)
-1. Check cache
+Redis:
+- user:interest:<userId> (realtime ranking signal)
 
-2. Check in-flight (coalescing)
-   → nếu có → await luôn
+Database:
+- post_likes: source of truth for like/unlike state
+- comments: source of truth for comments
+- user_interactions: durable interaction history for analytics/rebuild
 
-3. Acquire Redis lock
-   → nếu fail → wait + retry cache
-
-4. Query DB (chỉ 1 thằng làm)
-
-5. Set cache
-
-6. Resolve toàn bộ request đang chờ
-🔥 8. Kết luận thẳng
-Coalescing → giảm load trong 1 server
-Redis Lock → giảm load toàn hệ thống
-Anti-stampede → mục tiêu, không phải tool
-
-👉 Và:
-
-Best practice = Coalescing + Redis Lock
-🧠 Insight quan trọng (level senior)
-
-Nếu bạn chỉ chọn 1:
-
-1 server → chọn Coalescing
-multi server (prod) → bắt buộc có Redis Lock
-system lớn → phải dùng cả 2
-
-Nếu bạn muốn, mình có thể:
-
-Viết cho bạn production-ready code (Node + BullMQ + Redis) có cả coalescing + lock
-Hoặc review flow feed hiện tại xem bạn đang thiếu lớp nào (rất dễ bị dính stampede ở đoạn EXISTS query bạn gửi trước)
+Rebuild path when Redis miss/restart:
+- Query interaction history from DB
+- Aggregate per tag
+- Call postRedisService.rebuildFromDB(userId, interests)
+   

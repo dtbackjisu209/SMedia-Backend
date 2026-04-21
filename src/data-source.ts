@@ -23,6 +23,7 @@ import {
   Notification,
   Story,
   StoryView,
+  UserInteraction,
   UserBlock,
 } from './database/entity/index.js';
 
@@ -56,6 +57,4 @@ export const AppDataSource = new DataSource({
     ExpandNotifications1775200000000,
   ],
   migrationsRun: true,
-  synchronize: false,
-  logging: true,
 });

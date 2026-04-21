@@ -17,7 +17,6 @@ export class ExpandNotifications1775200000000 implements MigrationInterface {
         'story_view'
       ) NOT NULL
     `);
-
     const hasContentColumn = await queryRunner.hasColumn('notifications', 'content');
     if (!hasContentColumn) {
       await queryRunner.query(`
@@ -35,6 +34,7 @@ export class ExpandNotifications1775200000000 implements MigrationInterface {
         DROP COLUMN \`content\`
       `);
     }
+
     await queryRunner.query(`
       ALTER TABLE \`notifications\`
       MODIFY \`type\` enum(

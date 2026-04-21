@@ -15,5 +15,6 @@ export class AddConversationName1775000000000 implements MigrationInterface {
     if (hasNameColumn) {
       await queryRunner.query("ALTER TABLE `conversations` DROP COLUMN `name`");
     }
-  }
+
+}
 }

@@ -1,8 +1,13 @@
 import type { EntityManager } from 'typeorm';
-import { BadRequestError } from '../../core/handler/error.response.js';
+import { BadRequestError, NotFoundError } from '../../core/handler/error.response.js';
 import type { Notification } from '../../database/entity/notification.entity.js';
 import notificationRepository from './notification.repository.js';
-import type { CreateNotificationDto, NotificationItemDto, NotificationListQueryDto } from './notification.dto.js';
+import type {
+  CreateNotificationDto,
+  NotificationItemDto,
+  NotificationListQueryDto,
+  NotificationSummaryDto,
+} from './notification.dto.js';
 import { emitNotificationToUser } from './notification.socket.js';
 
 const MAX_LIMIT = 100;
@@ -46,8 +51,48 @@ class NotificationService {
     return notifications.map((item) => this.toItem(item));
   }
 
-  async markAllRead(userId: number): Promise<{ unreadCount: number }> {
+  async getSummary(userId: number): Promise<NotificationSummaryDto> {
+    const unreadCount = await notificationRepository.countUnread(userId);
+    return { unreadCount };
+  }
+
+  async markAsRead(userId: number, notificationId: number): Promise<NotificationSummaryDto> {
+    if (!Number.isFinite(notificationId) || notificationId <= 0) {
+      throw new BadRequestError('Invalid notification id');
+    }
+
+    const notification = await notificationRepository.findByIdForUser(notificationId, userId);
+    if (!notification) {
+      throw new NotFoundError('Notification not found');
+    }
+
+    if (!notification.is_read) {
+      notification.is_read = true;
+      await notificationRepository.save(notification);
+    }
+
+    const unreadCount = await notificationRepository.countUnread(userId);
+    return { unreadCount };
+  }
+
+  async markAllRead(userId: number): Promise<NotificationSummaryDto> {
     await notificationRepository.markAllRead(userId);
+    const unreadCount = await notificationRepository.countUnread(userId);
+    return { unreadCount };
+  }
+
+  async markConversationMessagesRead(userId: number, conversationId: number): Promise<NotificationSummaryDto> {
+    if (!Number.isFinite(conversationId) || conversationId <= 0) {
+      throw new BadRequestError('Invalid conversation id');
+    }
+
+    await notificationRepository.markMessageNotificationsReadByConversation(userId, conversationId);
+    const unreadCount = await notificationRepository.countUnread(userId);
+    return { unreadCount };
+  }
+
+  async clearRead(userId: number): Promise<NotificationSummaryDto> {
+    await notificationRepository.hideReadByUserId(userId);
     const unreadCount = await notificationRepository.countUnread(userId);
     return { unreadCount };
   }

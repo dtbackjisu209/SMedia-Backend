@@ -38,6 +38,9 @@ export class Notification {
   @Column({ type: 'boolean', default: false })
   is_read!: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  is_hidden!: boolean;
+
   @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 }

@@ -6,6 +6,7 @@ import { AddFollowRequests1773000000000 } from './database/migrations/1773000000
 import { AddLikeCommentCountToPost1774189442333 } from './database/migrations/1774189442333-add-like-comment-count-to-post.js';
 import { AddConversationName1775000000000 } from './database/migrations/1775000000000-add-conversation-name.js';
 import { ExpandNotifications1775200000000 } from './database/migrations/1775200000000-expand-notifications.js';
+import { AddNotificationHiddenFlag1775300000000 } from './database/migrations/1775300000000-add-notification-hidden-flag.js';
 import {
   User,
   Post,
@@ -55,6 +56,7 @@ export const AppDataSource = new DataSource({
     AddLikeCommentCountToPost1774189442333,
     AddConversationName1775000000000,
     ExpandNotifications1775200000000,
+    AddNotificationHiddenFlag1775300000000,
   ],
   migrationsRun: true,
 });

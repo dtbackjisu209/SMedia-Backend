@@ -16,7 +16,6 @@ export type NotificationType = (typeof notificationTypes)[number];
 
 @Entity('notifications')
 export class Notification {
-
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: number;
 

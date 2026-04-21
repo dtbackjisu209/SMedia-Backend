@@ -4,7 +4,7 @@ import { Notification } from '../../database/entity/notification.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 import type { CreateNotificationDto } from './notification.dto.js';
 
-class Notificationrepository {
+class NotificationRepository {
   private repo = AppDataSource.getRepository(Notification);
 
   private resolveRepo(manager?: EntityManager): Repository<Notification> {
@@ -52,4 +52,4 @@ class Notificationrepository {
   }
 }
 
-export default new Notificationrepository();
+export default new NotificationRepository();

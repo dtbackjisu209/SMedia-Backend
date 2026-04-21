@@ -1,5 +1,13 @@
 import type { NotificationType } from '../../database/entity/notification.entity.js';
 
+ 
+export type CreateNotificationDto = {
+  userId: number;
+  type: NotificationType;
+  content: string;
+  referenceId?: number | null;
+};
+
 export interface NotificationItemDto {
   id: number;
   type: NotificationType;
@@ -7,15 +15,9 @@ export interface NotificationItemDto {
   reference_id: number | null;
   is_read: boolean;
   created_at: Date;
-}
+};
 
-export interface NotificationListQueryDto {
-  limit?: number;
-}
+export type NotificationListQueryDto = {
+  limit?: number | string;
+};
 
-export interface CreateNotificationDto {
-  userId: number;
-  type: NotificationType;
-  content: string;
-  referenceId?: number | null;
-}

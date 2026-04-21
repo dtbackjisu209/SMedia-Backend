@@ -17,17 +17,24 @@ export class ExpandNotifications1775200000000 implements MigrationInterface {
         'story_view'
       ) NOT NULL
     `);
-    await queryRunner.query(`
-      ALTER TABLE \`notifications\`
-      ADD COLUMN \`content\` text NULL AFTER \`type\`
-    `);
+    const hasContentColumn = await queryRunner.hasColumn('notifications', 'content');
+    if (!hasContentColumn) {
+      await queryRunner.query(`
+        ALTER TABLE \`notifications\`
+        ADD COLUMN \`content\` text NULL AFTER \`type\`
+      `);
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      ALTER TABLE \`notifications\`
-      DROP COLUMN \`content\`
-    `);
+    const hasContentColumn = await queryRunner.hasColumn('notifications', 'content');
+    if (hasContentColumn) {
+      await queryRunner.query(`
+        ALTER TABLE \`notifications\`
+        DROP COLUMN \`content\`
+      `);
+    }
+
     await queryRunner.query(`
       ALTER TABLE \`notifications\`
       MODIFY \`type\` enum(

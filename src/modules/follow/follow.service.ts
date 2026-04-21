@@ -219,6 +219,7 @@ class FollowService {
   async unfollow(currentUserId: number, targetUserId: number): Promise<FollowActionResult> {
     if (!Number.isFinite(currentUserId) || !Number.isFinite(targetUserId)) {
       throw new BadRequestError('Invalid user id');
+      
     }
 
     if (currentUserId === targetUserId) {

@@ -1,0 +1,120 @@
+POST NEW FEED:
+User chọn file (ảnh/video)
+         │
+         ▼
+Frontend GET /upload-signature ──────────────► Backend tạo signature & timestamp
+         │
+         ▼
+Frontend upload file trực tiếp ─────────────► Cloudinary
+         │                                       │
+         ▼                                       ▼
+       Upload xong                            Cloudinary trả về URL
+         │
+         ▼
+Frontend POST /api/posts ───────────────────► Backend lưu metadata + Redis feed
+
+User request feed
+       │
+       ▼
+getFeedPostIds()  ──→  Redis Sorted Set (feed:<userId>)
+       │                    [postId₁, postId₂, ...]
+       ▼
+getPostCacheDataBatch()  ──→  Redis Hash (post:<postId>)
+       │                           {caption, thumbnail, ...}
+       │ cache miss?
+       ▼
+   Query DB  ──→  cachePostCacheDataBatch()  ──→  Redis
+
+
+============================================================
+POST INTERACTION FLOW (IMPLEMENTED)
+============================================================
+
+1) LIKE FLOW
+
+Client
+  POST /api/v1/post-likes/:postId
+  │
+  ▼
+postLike.route -> authMiddleware -> postLike.controller.likePost
+  │
+  ▼
+postLike.service.likePost(userId, postId)
+  │
+  ├── (A) postLike.repository.likePost
+  │       ├── INSERT post_likes(user_id, post_id)
+  │       └── UPDATE posts SET like_count = like_count + 1
+  │
+  └── (B) enqueueUserInteraction(userId, postId, 'like', tags)
+     │
+     ▼
+       BullMQ queue: user-interaction
+     │
+     ▼
+       user-interaction.worker
+     │
+     ▼
+       user-interaction.processor
+     ├── INSERT user_interactions(user_id, post_id, type, tag_snapshot)
+     └── Redis HINCRBYFLOAT user:interest:<userId> <tag> +1.0
+
+
+2) UNLIKE FLOW
+
+Client
+  DELETE /api/v1/post-likes/:postId
+  │
+  ▼
+postLike.route -> authMiddleware -> postLike.controller.unlikePost
+  │
+  ▼
+postLike.service.unlikePost(userId, postId)
+  │
+  ▼
+postLike.repository.unlikePost
+  ├── DELETE FROM post_likes WHERE user_id = ? AND post_id = ?
+  └── UPDATE posts
+        SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END
+
+NOTE:
+- Unlike currently does NOT push queue event.
+- So Redis interest score is not decreased in realtime flow.
+
+
+3) COMMENT FLOW
+
+Client
+  POST /comments (payload: userId, postId, content, parentId?)
+  │
+  ▼
+comment.service.createComment
+  │
+  ├── (A) comment.repository.createComment
+  │       ├── INSERT comments(...)
+  │       └── UPDATE posts SET comment_count = comment_count + 1
+  │
+  └── (B) enqueueUserInteraction(userId, postId, 'comment', tags)
+     │
+     ▼
+       user-interaction.worker -> user-interaction.processor
+     ├── INSERT user_interactions(..., type='comment', ...)
+     └── Redis HINCRBYFLOAT user:interest:<userId> <tag> +2.0
+
+
+============================================================
+DATA OWNERSHIP
+============================================================
+
+Redis:
+- user:interest:<userId> (realtime ranking signal)
+
+Database:
+- post_likes: source of truth for like/unlike state
+- comments: source of truth for comments
+- user_interactions: durable interaction history for analytics/rebuild
+
+Rebuild path when Redis miss/restart:
+- Query interaction history from DB
+- Aggregate per tag
+- Call postRedisService.rebuildFromDB(userId, interests)
+   

@@ -1,0 +1,1 @@
+export { Follow } from '../../database/entity/follow.entity.js';

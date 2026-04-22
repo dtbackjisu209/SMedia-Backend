@@ -5,8 +5,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
+    "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "migration:generate": "npm run build && typeorm migration:generate src/migrations/init -d dist/data-source.js",
+    "migration:generate": "npm run build && typeorm migration:generate -d dist/data-source.js",
     "migration:run": "typeorm migration:run -d dist/data-source.js"
   },
   "type": "module",
@@ -16,17 +17,30 @@
   "description": "",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.73.4",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "cloudinary": "^2.8.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
     "mysql2": "^3.16.2",
+    "redis": "^5.8.2",
     "reflect-metadata": "^0.2.2",
+    "socket.io": "^4.8.3",
     "typeorm": "^0.3.28"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.0.9",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^25.3.0",
+    "@types/socket.io": "^3.0.1",
     "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

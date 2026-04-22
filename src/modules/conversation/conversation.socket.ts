@@ -12,6 +12,15 @@ const getOnlineUserIds = (io: Server): number[] => {
     .filter((id) => Number.isFinite(id) && id > 0);
 };
 
+const hasRecipientOpenedConversation = async (
+  io: Server,
+  recipientId: number,
+  conversationId: string,
+): Promise<boolean> => {
+  const sockets = await io.in(`user_${recipientId}`).fetchSockets();
+  return sockets.some((recipientSocket) => String(recipientSocket.data.activeConversationId ?? '') === conversationId);
+};
+
 export const chatSocket = (io: Server, socket: Socket) => {
   socket.on('identify', async (userId: number) => {
     try {
@@ -40,6 +49,10 @@ export const chatSocket = (io: Server, socket: Socket) => {
     } catch (error) {
       console.error('[Socket Error] identify:', error);
     }
+  });
+
+  socket.on('set_active_conversation', (data: { conversationId: string | null }) => {
+    socket.data.activeConversationId = data?.conversationId ? String(data.conversationId) : null;
   });
 
   socket.on('join_private_chat', async (data: { myId: number; targetUserId: number }) => {
@@ -95,14 +108,17 @@ export const chatSocket = (io: Server, socket: Socket) => {
       const preview = data.content.trim().slice(0, 80);
 
       await Promise.all(
-        recipientIds.map((recipientId) =>
-          notificationService.createNotification({
+        recipientIds.map(async (recipientId) => {
+          const isReadingThisConversation = await hasRecipientOpenedConversation(io, recipientId, data.conversationId);
+          if (isReadingThisConversation) return;
+
+          return notificationService.createNotification({
             userId: recipientId,
             type: 'message',
             referenceId: Number(data.conversationId),
             content: `${savedMsg.sender_name} sent you a message: ${preview}`,
-          }),
-        ),
+          });
+        }),
       );
 
       console.log(`[Socket] Message sent in ${roomName} by User ${data.senderId}`);

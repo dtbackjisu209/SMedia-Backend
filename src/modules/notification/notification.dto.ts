@@ -21,3 +21,12 @@ export type NotificationListQueryDto = {
   limit?: number | string;
 };
 
+
+export interface NotificationSummaryDto {
+  unreadCount: number;
+}
+
+export type MarkConversationNotificationsReadDto = {
+  conversationId: number;
+};
+

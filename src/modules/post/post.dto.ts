@@ -16,6 +16,12 @@ export type CreatePostPayloadDTO = {
 	media: CreatePostMediaDTO[];
 };
 
+export type UpdatePostPayloadDTO = {
+	caption?: string;
+	location?: string;
+	tags?: string[];
+};
+
 export type CreatePostWithMediaInputDTO = {
 	userId: number;
 	caption?: string;
@@ -27,6 +33,14 @@ export type CreatePostResultDTO = {
 	id: number;
 	caption: string | null;
 	location: string | null;
+	created_at: Date;
+};
+
+export type UpdatePostResultDTO = {
+	id: number;
+	caption: string | null;
+	location: string | null;
+	tags: string[];
 	created_at: Date;
 };
 

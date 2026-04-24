@@ -5,6 +5,7 @@ import { Init1769599359919 } from './database/migrations/1769599359919-init.js';
 import { AddFollowRequests1773000000000 } from './database/migrations/1773000000000-add-follow-requests.js';
 import { AddLikeCommentCountToPost1774189442333 } from './database/migrations/1774189442333-add-like-comment-count-to-post.js';
 import { AddConversationName1775000000000 } from './database/migrations/1775000000000-add-conversation-name.js';
+import { AddPostUpdatedAt1775300000000 } from './database/migrations/1775300000000-add-post-updated-at.js';
 import { ExpandNotifications1775200000000 } from './database/migrations/1775200000000-expand-notifications.js';
 import {
   User,
@@ -54,6 +55,7 @@ export const AppDataSource = new DataSource({
     AddFollowRequests1773000000000,
     AddLikeCommentCountToPost1774189442333,
     AddConversationName1775000000000,
+    AddPostUpdatedAt1775300000000,
     ExpandNotifications1775200000000,
   ],
   migrationsRun: true,

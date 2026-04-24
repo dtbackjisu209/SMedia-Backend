@@ -17,6 +17,21 @@ import { PostMedia } from '../../database/entity/postMedia.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 
 class PostRepository {
+	public async getPostOwnerId(postId: number): Promise<number | null> {
+		const row = await AppDataSource.getRepository(Post)
+			.createQueryBuilder('post')
+			.select('post.user_id', 'author_id')
+			.where('post.id = :postId', { postId })
+			.getRawOne<{ author_id: string }>();
+
+		if (!row) {
+			return null;
+		}
+
+		const authorId = Number(row.author_id);
+		return Number.isFinite(authorId) ? authorId : null;
+	}
+
 	public async createPostWithMedia(payload: CreatePostWithMediaInputDTO): Promise<Post> {
 		const userRepo = AppDataSource.getRepository(User);
 		const postRepo = AppDataSource.getRepository(Post);
@@ -225,6 +240,36 @@ class PostRepository {
 			existing.mediaCount += 1;
 		}
 
+		const tagRows = await AppDataSource.getRepository(PostHashtag)
+			.createQueryBuilder('postHashtag')
+			.innerJoin(Hashtag, 'hashtag', 'hashtag.id = postHashtag.hashtag_id')
+			.select('postHashtag.post_id', 'post_id')
+			.addSelect('hashtag.name', 'tag_name')
+			.where('postHashtag.post_id IN (:...postIds)', { postIds })
+			.getRawMany<{
+				post_id: string;
+				tag_name: string;
+			}>();
+
+		const tagsByPostId = new Map<number, string[]>();
+		for (const row of tagRows) {
+			const postId = Number(row.post_id);
+			if (!Number.isFinite(postId)) {
+				continue;
+			}
+
+			const normalizedTag = row.tag_name.trim().toLowerCase();
+			if (!normalizedTag) {
+				continue;
+			}
+
+			const existing = tagsByPostId.get(postId) ?? [];
+			if (!existing.includes(normalizedTag)) {
+				existing.push(normalizedTag);
+				tagsByPostId.set(postId, existing);
+			}
+		}
+
 		return postRows.map((row) => {
 			const postId = Number(row.post_id);
 			const media = mediaByPostId.get(postId);
@@ -236,7 +281,7 @@ class PostRepository {
 				likeCount: Number(row.post_like_count) || 0,
 				commentCount: Number(row.post_comment_count) || 0,
 				createdAt: new Date(row.post_created_at),
-				tags: [],
+				tags: tagsByPostId.get(postId) ?? [],
 				thumbnail: media?.thumbnail ?? '',
 				mediaCount: media?.mediaCount ?? 0,
 				author: {
@@ -247,6 +292,68 @@ class PostRepository {
 				},
 			};
 		});
+	}
+
+	public async updatePostMetadataAndTags(
+		postId: number,
+		payload: {
+			caption: string | null;
+			location: string | null;
+			tags: string[];
+		},
+		manager?: EntityManager,
+	): Promise<boolean> {
+		const repo = manager ?? AppDataSource.manager;
+
+		const updateResult = await repo
+			.getRepository(Post)
+			.createQueryBuilder()
+			.update(Post)
+			.set({
+				caption: payload.caption,
+				location: payload.location,
+				updated_at: () => 'CURRENT_TIMESTAMP',
+			})
+			.where('id = :postId', { postId })
+			.execute();
+
+		if ((updateResult.affected ?? 0) === 0) {
+			return false;
+		}
+
+		await repo.getRepository(PostHashtag).delete({ post_id: postId });
+
+		if (payload.tags.length === 0) {
+			return true;
+		}
+
+		const hashtagRepo = repo.getRepository(Hashtag);
+		await hashtagRepo
+			.createQueryBuilder()
+			.insert()
+			.into(Hashtag)
+			.values(payload.tags.map((name) => ({ name })))
+			.orIgnore()
+			.execute();
+
+		const hashtagRows = await hashtagRepo
+			.createQueryBuilder('hashtag')
+			.select('hashtag.id', 'id')
+			.addSelect('hashtag.name', 'name')
+			.where('hashtag.name IN (:...names)', { names: payload.tags })
+			.getRawMany<{ id: string; name: string }>();
+
+		if (hashtagRows.length === 0) {
+			return true;
+		}
+
+		const postHashtagRows = hashtagRows.map((row) => ({
+			post_id: postId,
+			hashtag_id: Number(row.id),
+		}));
+
+		await repo.getRepository(PostHashtag).insert(postHashtagRows);
+		return true;
 	}
 
 	public async getRecentFeedCacheDataByAuthorId(

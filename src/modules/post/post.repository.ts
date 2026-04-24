@@ -3,11 +3,16 @@ import type {
 	CreatePostWithMediaInputDTO,
 	FeedAuthorDTO,
 	FeedPostCacheDataDTO,
+	PostDeleteCandidateDTO,
 	PostDetailDTO,
 } from './post.dto.js';
 import { NotFoundError } from '../../core/handler/error.response.js';
+import type { EntityManager } from 'typeorm';
+import { Comment } from '../../database/entity/comment.entity.js';
 import { Hashtag } from '../../database/entity/hashtag.entity.js';
 import { Post } from '../../database/entity/post.entity.js';
+import { PostHashtag } from '../../database/entity/postHashtag.entity.js';
+import { PostLike } from '../../database/entity/postLike.entity.js';
 import { PostMedia } from '../../database/entity/postMedia.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 
@@ -272,6 +277,70 @@ class PostRepository {
 		return orderedPostIds
 			.map((postId) => postsById.get(postId))
 			.filter((post): post is FeedPostCacheDataDTO => Boolean(post));
+	}
+
+	public async getPostDeleteCandidate(postId: number): Promise<PostDeleteCandidateDTO | null> {
+		const postRow = await AppDataSource.getRepository(Post)
+			.createQueryBuilder('post')
+			.select('post.id', 'post_id')
+			.addSelect('post.user_id', 'author_id')
+			.where('post.id = :postId', { postId })
+			.getRawOne<{
+				post_id: string;
+				author_id: string;
+			}>();
+
+		if (!postRow) {
+			return null;
+		}
+
+		const mediaRows = await AppDataSource.getRepository(PostMedia)
+			.createQueryBuilder('media')
+			.select('media.media_url', 'media_url')
+			.addSelect('media.media_type', 'media_type')
+			.where('media.post_id = :postId', { postId })
+			.orderBy('media.position', 'ASC')
+			.getRawMany<{
+				media_url: string;
+				media_type: 'image' | 'video';
+			}>();
+
+		return {
+			postId: Number(postRow.post_id),
+			authorId: Number(postRow.author_id),
+			media: mediaRows.map((row) => ({
+				mediaUrl: row.media_url,
+				mediaType: row.media_type,
+			})),
+		};
+	}
+
+	public async deletePostGraphById(postId: number, manager?: EntityManager): Promise<boolean> {
+		const repo = manager ?? AppDataSource.manager;
+
+		await repo.getRepository(PostLike).delete({ post_id: postId });
+		await repo
+			.getRepository(Comment)
+			.createQueryBuilder()
+			.delete()
+			.where('post_id = :postId', { postId })
+			.execute();
+		await repo.getRepository(PostHashtag).delete({ post_id: postId });
+		await repo
+			.getRepository(PostMedia)
+			.createQueryBuilder()
+			.delete()
+			.where('post_id = :postId', { postId })
+			.execute();
+
+		const postDeleteResult = await repo
+			.getRepository(Post)
+			.createQueryBuilder()
+			.delete()
+			.where('id = :postId', { postId })
+			.execute();
+
+		return (postDeleteResult.affected ?? 0) > 0;
 	}
 }
 

@@ -108,3 +108,21 @@ export type PostDetailDTO = {
 	comment_count: number;
 };
 
+export type DeletePostCleanupStatusDTO = 'queued' | 'queue_failed';
+
+export type DeletePostResultDTO = {
+	postId: number;
+	cleanupStatus: DeletePostCleanupStatusDTO;
+};
+
+export type PostDeleteMediaDTO = {
+	mediaUrl: string;
+	mediaType: 'image' | 'video';
+};
+
+export type PostDeleteCandidateDTO = {
+	postId: number;
+	authorId: number;
+	media: PostDeleteMediaDTO[];
+};
+

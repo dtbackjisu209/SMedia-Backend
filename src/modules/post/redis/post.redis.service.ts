@@ -159,6 +159,26 @@ class PostRedisService {
 		);
 	}
 
+	public async removePostIdFromFeeds(userIds: number[], postId: number): Promise<void> {
+		if (userIds.length === 0) {
+			return;
+		}
+
+		await ensureRedisConnected();
+
+		const pipeline = redisClient.multi();
+		for (const userId of userIds) {
+			pipeline.zRem(postRedisKeys.feed(userId), String(postId));
+		}
+
+		await pipeline.exec();
+	}
+
+	public async deletePostCache(postId: number): Promise<void> {
+		await ensureRedisConnected();
+		await redisClient.del(postRedisKeys.postData(postId));
+	}
+
 	public async warmFeedWithRecentPosts(userId: number, posts: FeedPostCacheDataDTO[]): Promise<void> {
 		if (posts.length === 0) {
 			return;

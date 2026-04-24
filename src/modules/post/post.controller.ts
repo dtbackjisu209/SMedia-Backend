@@ -66,6 +66,24 @@ class PostController {
 			data: post,
 		}).send(res);
 	}
+
+	public async deletePost(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		const postId = Number(req.params.postId);
+		if (!Number.isFinite(postId) || postId <= 0) {
+			throw new BadRequestError('postId must be a positive number');
+		}
+
+		const result = await postService.deletePost(req.userId, postId);
+
+		new OK({
+			message: 'Post deleted successfully',
+			data: result,
+		}).send(res);
+	}
 }
 
 export default new PostController();

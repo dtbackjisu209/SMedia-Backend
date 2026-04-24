@@ -1,14 +1,18 @@
 import { cloudinary } from '../../core/config/cloudinary.js';
 import { env } from '../../core/config/env.js';
+import { AppDataSource } from '../../data-source.js';
+import { ForbiddenError, NotFoundError } from '../../core/handler/error.response.js';
 import type {
 	CloudinaryUploadSignatureDTO,
 	CreatePostPayloadDTO,
 	CreatePostResultDTO,
+	DeletePostResultDTO,
 	FeedPostCacheDataDTO,
 	GetFeedResultDTO,
 	PostDetailDTO,
 	UserInterestDTO,
 } from './post.dto.js';
+import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
 import postRepository from './post.repository.js';
 import postRedisService from './redis/post.redis.service.js';
@@ -141,6 +145,53 @@ class PostService {
 
 	public async getPostDetail(postId: number): Promise<PostDetailDTO> {
 		return postRepository.getPostDetailById(postId);
+	}
+
+	public async deletePost(userId: number, postId: number): Promise<DeletePostResultDTO> {
+		const candidate = await postRepository.getPostDeleteCandidate(postId);
+		if (!candidate) {
+			throw new NotFoundError(`Post not found with id ${postId}`);
+		}
+
+		if (Number(candidate.authorId) !== Number(userId)) {
+			throw new ForbiddenError('You can only delete your own post');
+		}
+
+		await AppDataSource.transaction(async (manager) => {
+			const deleted = await postRepository.deletePostGraphById(postId, manager);
+			if (!deleted) {
+				throw new NotFoundError(`Post not found with id ${postId}`);
+			}
+		});
+
+		let cleanupStatus: DeletePostResultDTO['cleanupStatus'] = 'queued';
+
+		try {
+			await enqueuePostDeleteCleanup({
+				postId,
+				authorId: candidate.authorId,
+				media: candidate.media,
+				deletedAtIso: new Date().toISOString(),
+			});
+		} catch (error) {
+			console.error('[post-delete] enqueue failed (attempt 1):', error);
+			try {
+				await enqueuePostDeleteCleanup({
+					postId,
+					authorId: candidate.authorId,
+					media: candidate.media,
+					deletedAtIso: new Date().toISOString(),
+				});
+			} catch (retryError) {
+				cleanupStatus = 'queue_failed';
+				console.error('[post-delete] enqueue failed (attempt 2):', retryError);
+			}
+		}
+
+		return {
+			postId,
+			cleanupStatus,
+		};
 	}
 
 	private calculateRankingScore(post: FeedPostCacheDataDTO, userInterest: UserInterestDTO): number {

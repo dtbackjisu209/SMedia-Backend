@@ -294,6 +294,36 @@ class PostRepository {
 		});
 	}
 
+	public async getPostAuthorIdsByPostIds(postIds: number[]): Promise<Map<number, number>> {
+		if (postIds.length === 0) {
+			return new Map<number, number>();
+		}
+
+		const rows = await AppDataSource.getRepository(Post)
+			.createQueryBuilder('post')
+			.select('post.id', 'post_id')
+			.addSelect('post.user_id', 'author_id')
+			.where('post.id IN (:...postIds)', { postIds })
+			.getRawMany<{
+				post_id: string;
+				author_id: string;
+			}>();
+
+		const authorByPostId = new Map<number, number>();
+		for (const row of rows) {
+			const postId = Number(row.post_id);
+			const authorId = Number(row.author_id);
+
+			if (!Number.isFinite(postId) || !Number.isFinite(authorId)) {
+				continue;
+			}
+
+			authorByPostId.set(postId, authorId);
+		}
+
+		return authorByPostId;
+	}
+
 	public async updatePostMetadataAndTags(
 		postId: number,
 		payload: {

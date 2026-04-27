@@ -18,6 +18,7 @@ import { startPostDeleteCleanupWorker } from './modules/post/queues/post-delete/
 import { startPostFeedFanoutWorker } from './modules/post/queues/post-fanout/post-fanout.worker.js';
 import storyRouter from './modules/story/story.route.js';
 import { startUserInteractionWorker } from './modules/post/queues/user-interaction/user-interaction.worker.js';
+import { startUnfollowFeedCleanupWorker } from './modules/follow/queues/unfollow-feed-cleanup/unfollow-feed-cleanup.worker.js';
 const PORT = 3000;
 app.use(express.json());
 app.use('/api/auth', authRoutes);
@@ -46,6 +47,8 @@ AppDataSource.initialize()
                 console.log('User interaction worker started');
                 startPostDeleteCleanupWorker();
                 console.log('Post delete cleanup worker started');
+                startUnfollowFeedCleanupWorker();
+                console.log('Unfollow feed cleanup worker started');
             })
             .catch((error) => console.error('Redis connection failed:', error));
 

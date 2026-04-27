@@ -66,6 +66,16 @@ class PostRedisService {
 		return rawPostIds.map((id) => Number(id)).filter((id) => Number.isFinite(id));
 	}
 
+	public async getAllFeedPostIds(userId: number): Promise<number[]> {
+		await ensureRedisConnected();
+
+		const rawPostIds = await redisClient.zRange(postRedisKeys.feed(userId), 0, -1, {
+			REV: true,
+		});
+
+		return rawPostIds.map((id) => Number(id)).filter((id) => Number.isFinite(id));
+	}
+
 	public async getPostCacheDataBatch(postIds: number[]): Promise<FeedPostCacheDataDTO[]> {
 		if (postIds.length === 0) {
 			return [];

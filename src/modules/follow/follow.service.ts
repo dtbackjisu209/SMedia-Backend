@@ -7,6 +7,7 @@ import { User } from '../../database/entity/user.entity.js';
 import followRepository from './follow.repository.js';
 import postRepository from '../post/post.repository.js';
 import postRedisService from '../post/redis/post.redis.service.js';
+import { enqueueUnfollowFeedCleanup } from './queues/unfollow-feed-cleanup/unfollow-feed-cleanup.producer.js';
 import type {
   FollowActionResult,
   FollowUserSummary,
@@ -37,6 +38,27 @@ const maybeParseCount = (value: string | null): number | null => {
 };
 
 class FollowService {
+  private async cleanupUnfollowedAuthorFromViewerFeed(
+    viewerUserId: number,
+    targetAuthorId: number,
+  ): Promise<void> {
+    const feedPostIds = await postRedisService.getAllFeedPostIds(viewerUserId);
+    if (feedPostIds.length === 0) {
+      return;
+    }
+
+    const authorByPostId = await postRepository.getPostAuthorIdsByPostIds(feedPostIds);
+    const postIdsToRemove = feedPostIds.filter(
+      (postId) => authorByPostId.get(postId) === targetAuthorId,
+    );
+
+    if (postIdsToRemove.length === 0) {
+      return;
+    }
+
+    await postRedisService.removePostIdsFromFeed(viewerUserId, postIdsToRemove);
+  }
+
   private async safeEnsureRedisConnected(): Promise<boolean> {
     try {
       await ensureRedisConnected();
@@ -255,6 +277,32 @@ class FollowService {
     });
 
     await this.invalidateCountCache([currentUserId, targetUserId]);
+
+    if (result.mode === 'unfollowed') {
+      try {
+        await this.cleanupUnfollowedAuthorFromViewerFeed(currentUserId, targetUserId);
+      } catch (error) {
+        console.error('[follow] sync unfollow feed cleanup failed:', {
+          viewerUserId: currentUserId,
+          targetAuthorId: targetUserId,
+          error,
+        });
+      }
+
+      try {
+        await enqueueUnfollowFeedCleanup({
+          viewerUserId: currentUserId,
+          targetAuthorId: targetUserId,
+          unfollowedAtIso: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('[follow] enqueue unfollow feed cleanup failed:', {
+          viewerUserId: currentUserId,
+          targetAuthorId: targetUserId,
+          error,
+        });
+      }
+    }
 
     return result;
   }

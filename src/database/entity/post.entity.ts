@@ -1,4 +1,12 @@
-import {Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, JoinColumn} from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  JoinColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { User } from './user.entity.js';
 
 @Entity('posts')
@@ -18,6 +26,9 @@ export class Post {
 
   @CreateDateColumn({type: 'timestamp'})
   created_at!: Date;
+
+  @UpdateDateColumn({ type: 'timestamp', nullable: true })
+  updated_at!: Date | null;
 
   @Column({ type: 'int', default: 0 })
   like_count!: number;

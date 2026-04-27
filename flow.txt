@@ -117,4 +117,93 @@ Rebuild path when Redis miss/restart:
 - Query interaction history from DB
 - Aggregate per tag
 - Call postRedisService.rebuildFromDB(userId, interests)
+
+
+============================================================
+POST DELETE FLOW (SYNC SHORT + ASYNC CLEANUP)
+============================================================
+
+1) API ENTRY
+
+Client
+  DELETE /api/v1/posts/:postId
+  │
+  ▼
+post.route -> authMiddleware -> post.controller.deletePost
+  │
+  ▼
+post.service.deletePost(userId, postId)
+
+
+2) DB TRANSACTION (SHORT)
+
+service loads delete candidate:
+- post exists?
+- authorId check (owner only)
+- collect media URLs for cleanup payload
+
+transaction delete order:
+1. post_likes
+2. comments
+3. post_hashtags
+4. post_media
+5. posts
+
+commit immediately after DB delete success.
+
+
+3) ASYNC CLEANUP QUEUE
+
+after commit, enqueue post-delete-cleanup job:
+- postId
+- authorId
+- media[]
+- deletedAtIso
+
+if enqueue fails:
+- log attempt 1
+- retry enqueue once
+- keep response successful (DB already committed)
+
+
+4) WORKER CLEANUP
+
+post-delete worker:
+- DEL post:data:{postId}
+- getFollowerIdsByUserId(authorId)
+- batch ZREM postId from feed:{authorId} + follower feeds
+- Cloudinary destroy for each media URL (best-effort)
+- on final failure push to DLQ
+
+
+5) READ SELF-HEAL
+
+If some feed keys still contain stale postId before cleanup finishes,
+getFeed fallback path removes orphan ids when post data is missing,
+so system remains eventually consistent.
+
+
+Mermaid Diagram:
+
+```mermaid
+flowchart TD
+    A[Client DELETE postId] --> B[Auth Middleware]
+    B --> C[Post Controller Validate]
+    C --> D[Post Service Authorize]
+    D --> E[(DB Transaction)]
+    E --> E1[Delete post_likes]
+    E1 --> E2[Delete comments]
+    E2 --> E3[Delete post_hashtags]
+    E3 --> E4[Delete post_media]
+    E4 --> E5[Delete posts]
+    E5 --> F[Commit]
+    F --> G[Enqueue post-delete-cleanup]
+    G --> H[[BullMQ Worker]]
+    H --> I[DEL post:data:postId]
+    H --> J[Batch ZREM postId from feeds]
+    H --> K[Cloudinary destroy media]
+    H --> L{Failed after retries?}
+    L -- Yes --> M[(DLQ)]
+    L -- No --> N[Done]
+```
    

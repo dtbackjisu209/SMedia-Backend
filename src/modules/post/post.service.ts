@@ -1,14 +1,20 @@
 import { cloudinary } from '../../core/config/cloudinary.js';
 import { env } from '../../core/config/env.js';
+import { AppDataSource } from '../../data-source.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/handler/error.response.js';
 import type {
 	CloudinaryUploadSignatureDTO,
 	CreatePostPayloadDTO,
 	CreatePostResultDTO,
+	DeletePostResultDTO,
 	FeedPostCacheDataDTO,
 	GetFeedResultDTO,
 	PostDetailDTO,
+	UpdatePostPayloadDTO,
+	UpdatePostResultDTO,
 	UserInterestDTO,
 } from './post.dto.js';
+import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
 import postRepository from './post.repository.js';
 import postRedisService from './redis/post.redis.service.js';
@@ -17,6 +23,10 @@ class PostService {
 	private static readonly FEED_LIMIT_DEFAULT = 100;
 	private static readonly FEED_HALF_LIFE_HOURS = 18;
 	private static readonly FEED_ENGAGEMENT_CAP = 500;
+	private static readonly CAPTION_MAX_LENGTH = 2200;
+	private static readonly LOCATION_MAX_LENGTH = 255;
+	private static readonly TAG_MAX_LENGTH = 50;
+	private static readonly TAG_MAX_COUNT = 20;
 
 	public getUploadSignature(): CloudinaryUploadSignatureDTO {
 		const timestamp = Math.floor(Date.now() / 1000);
@@ -143,6 +153,126 @@ class PostService {
 		return postRepository.getPostDetailById(postId);
 	}
 
+	public async updatePost(
+		userId: number,
+		postId: number,
+		payload: UpdatePostPayloadDTO,
+	): Promise<UpdatePostResultDTO> {
+		const hasAtLeastOneField =
+			payload.caption !== undefined || payload.location !== undefined || payload.tags !== undefined;
+		if (!hasAtLeastOneField) {
+			throw new BadRequestError('At least one field must be provided: caption, location, tags');
+		}
+
+		const ownerId = await postRepository.getPostOwnerId(postId);
+		if (ownerId === null) {
+			throw new NotFoundError(`Post not found with id ${postId}`);
+		}
+
+		if (Number(ownerId) !== Number(userId)) {
+			throw new ForbiddenError('You can only update your own post');
+		}
+
+		const [currentPost, currentTags] = await Promise.all([
+			postRepository.getPostDetailById(postId),
+			postRepository.getTagsByPostId(postId),
+		]);
+
+		const normalizedCaption =
+			payload.caption === undefined
+				? currentPost.caption
+				: this.normalizeOptionalText(payload.caption, PostService.CAPTION_MAX_LENGTH);
+		const normalizedLocation =
+			payload.location === undefined
+				? currentPost.location
+				: this.normalizeOptionalText(payload.location, PostService.LOCATION_MAX_LENGTH);
+		const normalizedTags =
+			payload.tags === undefined ? currentTags : this.normalizeTags(payload.tags);
+
+		await AppDataSource.transaction(async (manager) => {
+			const updated = await postRepository.updatePostMetadataAndTags(
+				postId,
+				{
+					caption: normalizedCaption,
+					location: normalizedLocation,
+					tags: normalizedTags,
+				},
+				manager,
+			);
+
+			if (!updated) {
+				throw new NotFoundError(`Post not found with id ${postId}`);
+			}
+		});
+
+		try {
+			const [cacheData] = await postRepository.getFeedCacheDataByPostIds([postId]);
+			if (cacheData) {
+				await postRedisService.cachePostCacheDataBatch([cacheData]);
+			}
+		} catch (error) {
+			console.error('[post-update] cache refresh failed:', { postId, error });
+		}
+
+		const updatedPost = await postRepository.getPostDetailById(postId);
+		const tags = await postRepository.getTagsByPostId(postId);
+
+		return {
+			id: updatedPost.id,
+			caption: updatedPost.caption,
+			location: updatedPost.location,
+			tags,
+			created_at: updatedPost.created_at,
+		};
+	}
+
+	public async deletePost(userId: number, postId: number): Promise<DeletePostResultDTO> {
+		const candidate = await postRepository.getPostDeleteCandidate(postId);
+		if (!candidate) {
+			throw new NotFoundError(`Post not found with id ${postId}`);
+		}
+
+		if (Number(candidate.authorId) !== Number(userId)) {
+			throw new ForbiddenError('You can only delete your own post');
+		}
+
+		await AppDataSource.transaction(async (manager) => {
+			const deleted = await postRepository.deletePostGraphById(postId, manager);
+			if (!deleted) {
+				throw new NotFoundError(`Post not found with id ${postId}`);
+			}
+		});
+
+		let cleanupStatus: DeletePostResultDTO['cleanupStatus'] = 'queued';
+
+		try {
+			await enqueuePostDeleteCleanup({
+				postId,
+				authorId: candidate.authorId,
+				media: candidate.media,
+				deletedAtIso: new Date().toISOString(),
+			});
+		} catch (error) {
+			console.error('[post-delete] enqueue failed (attempt 1):', error);
+			try {
+				await enqueuePostDeleteCleanup({
+					postId,
+					authorId: candidate.authorId,
+					media: candidate.media,
+					deletedAtIso: new Date().toISOString(),
+				});
+			} catch (retryError) {
+				cleanupStatus = 'queue_failed';
+				console.error('[post-delete] enqueue failed (attempt 2):', retryError);
+			}
+		}
+
+		return {
+			postId,
+			cleanupStatus,
+		};
+	}
+
 	private calculateRankingScore(post: FeedPostCacheDataDTO, userInterest: UserInterestDTO): number {
 		const now = Date.now();
 		const ageMs = Math.max(0, now - post.createdAt.getTime());
@@ -189,6 +319,39 @@ class PostService {
 
 		const sum = hitScores.reduce((acc, value) => acc + value, 0);
 		return sum / hitScores.length;
+	}
+
+	private normalizeOptionalText(value: string, maxLength: number): string | null {
+		const trimmed = value.trim();
+		if (trimmed.length > maxLength) {
+			throw new BadRequestError(`Text exceeds maximum length ${maxLength}`);
+		}
+
+		return trimmed.length === 0 ? null : trimmed;
+	}
+
+	private normalizeTags(tags: string[] | undefined): string[] {
+		if (tags === undefined) {
+			return [];
+		}
+
+		if (tags.length > PostService.TAG_MAX_COUNT) {
+			throw new BadRequestError(`tags cannot exceed ${PostService.TAG_MAX_COUNT} items`);
+		}
+
+		const normalized = tags
+			.map((tag) => tag.trim().toLowerCase())
+			.filter((tag) => tag.length > 0)
+			.map((tag) => (tag.startsWith('#') ? tag.slice(1) : tag))
+			.filter((tag) => tag.length > 0);
+
+		for (const tag of normalized) {
+			if (tag.length > PostService.TAG_MAX_LENGTH) {
+				throw new BadRequestError(`tag exceeds maximum length ${PostService.TAG_MAX_LENGTH}`);
+			}
+		}
+
+		return Array.from(new Set(normalized));
 	}
 }
 

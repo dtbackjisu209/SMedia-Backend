@@ -13,7 +13,13 @@ export const DEFAULT_JOB_OPTIONS: JobsOptions = {
 		type: 'exponential',
 		delay: 2000,
 	},
-	removeOnComplete: true,
+	// Keep recent jobs so they are visible in Redis/BullMQ UI for debugging.
+	removeOnComplete: {
+		count: 500,
+	},
+	removeOnFail: {
+		count: 1000,
+	},
 };
 
 export const redisConnection = redisQueueConnection;

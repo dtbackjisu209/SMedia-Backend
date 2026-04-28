@@ -16,6 +16,7 @@ import type {
 } from './post.dto.js';
 import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
+import notificationService from '../notification/notification.service.js';
 import postRepository from './post.repository.js';
 import postRedisService from './redis/post.redis.service.js';
 
@@ -75,6 +76,8 @@ class PostService {
 			thumbnail: firstMedia?.media_url ?? '',
 			mediaCount: media.length,
 		});
+
+		await notificationService.notifyFollowersAboutNewPost(userId, savedPost.id);
 
 		const result: CreatePostResultDTO = {
 			id: savedPost.id,

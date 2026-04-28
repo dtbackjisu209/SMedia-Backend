@@ -41,22 +41,34 @@ postLike.route -> authMiddleware -> postLike.controller.likePost
   ▼
 postLike.service.likePost(userId, postId)
   │
-  ├── (A) postLike.repository.likePost
+  ├── (A) postLike.repository.likePost (DB transaction)
+  │       ├── check existing like by (user_id, post_id)
+  │       ├── if already liked -> return liked=false
   │       ├── INSERT post_likes(user_id, post_id)
   │       └── UPDATE posts SET like_count = like_count + 1
   │
-  └── (B) enqueueUserInteraction(userId, postId, 'like', tags)
-     │
-     ▼
-       BullMQ queue: user-interaction
-     │
-     ▼
-       user-interaction.worker
-     │
-     ▼
-       user-interaction.processor
-     ├── INSERT user_interactions(user_id, post_id, type, tag_snapshot)
-     └── Redis HINCRBYFLOAT user:interest:<userId> <tag> +1.0
+  └── (B) if liked=true, enqueue 2 background jobs
+      │
+      ├── (B1) enqueueUserInteraction(userId, postId, 'like', tags)
+      │    │
+      │    ▼
+      │      BullMQ queue: user-interaction
+      │    │
+      │    ▼
+      │      user-interaction.worker -> user-interaction.processor
+      │    ├── INSERT user_interactions(user_id, post_id, type, tag_snapshot)
+      │    └── Redis HINCRBYFLOAT user:interest:<userId> <tag> +1.0
+      │
+      └── (B2) enqueuePostCacheRefresh(postId, trigger='like')
+           │
+           ▼
+             BullMQ queue: post-cache-refresh
+           │
+           ▼
+             post-cache-refresh.worker -> post-cache-refresh.processor
+           ├── getFeedCacheDataByPostIds([postId]) from DB
+           ├── if post exists -> cachePostCacheDataBatch([post]) to Redis post:data:{postId}
+           └── if post missing -> DEL Redis post:data:{postId}
 
 
 2) UNLIKE FLOW
@@ -70,15 +82,27 @@ postLike.route -> authMiddleware -> postLike.controller.unlikePost
   ▼
 postLike.service.unlikePost(userId, postId)
   │
-  ▼
-postLike.repository.unlikePost
-  ├── DELETE FROM post_likes WHERE user_id = ? AND post_id = ?
-  └── UPDATE posts
-        SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END
+  ├── (A) postLike.repository.unlikePost (DB transaction)
+  │       ├── check existing like by (user_id, post_id)
+  │       ├── if not liked -> return unliked=false
+  │       ├── DELETE FROM post_likes WHERE user_id = ? AND post_id = ?
+  │       └── UPDATE posts
+  │             SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END
+  │
+  └── (B) if unliked=true, enqueuePostCacheRefresh(postId, trigger='unlike')
+      │
+      ▼
+        BullMQ queue: post-cache-refresh
+      │
+      ▼
+        post-cache-refresh.worker -> post-cache-refresh.processor
+      ├── getFeedCacheDataByPostIds([postId]) from DB
+      ├── if post exists -> cachePostCacheDataBatch([post]) to Redis post:data:{postId}
+      └── if post missing -> DEL Redis post:data:{postId}
 
 NOTE:
-- Unlike currently does NOT push queue event.
-- So Redis interest score is not decreased in realtime flow.
+- Unlike does NOT enqueue user-interaction event (interest score is not decreased realtime).
+- Unlike now DOES enqueue post-cache-refresh to keep feed like_count close to DB.
 
 
 3) COMMENT FLOW
@@ -206,4 +230,124 @@ flowchart TD
     L -- Yes --> M[(DLQ)]
     L -- No --> N[Done]
 ```
+
+
+============================================================
+UNFOLLOW FLOW (ARROW STYLE)
+============================================================
+
+Client
+  DELETE /api/v1/follow
+  body: { targetUserId }
+  │
+  ▼
+follow.route -> authMiddleware -> follow.controller.unfollow
+  │
+  ▼
+follow.service.unfollow(currentUserId, targetUserId)
+  │
+  ├── (A) Guard + Validate
+  │       ├── target ids must be valid numbers
+  │       ├── cannot unfollow yourself
+  │       └── ensure currentUser + targetUser exist
+  │
+  ├── (B) DB Transaction (atomic)
+  │       ├── DELETE follows WHERE follower_id=currentUserId AND following_id=targetUserId
+  │       ├── DELETE follow_requests WHERE requester_id=currentUserId AND target_user_id=targetUserId AND status='pending'
+  │       └── branch result
+  │            ├── if follow deleted -> mode='unfollowed'
+  │            ├── else if pending request deleted -> mode='cancelled_request'
+  │            └── else -> NotFoundError('Follow relationship not found')
+  │
+  ├── (C) Redis count cache invalidation
+  │       ├── DEL follow:count:followers:{currentUserId}
+  │       ├── DEL follow:count:following:{currentUserId}
+  │       ├── DEL follow:count:followers:{targetUserId}
+  │       └── DEL follow:count:following:{targetUserId}
+  │
+  └── (D) Feed cleanup only when mode='unfollowed'
+      │
+      ├── (D1) Sync cleanup (best-effort)
+      │       ├── getAllFeedPostIds(viewerUserId)
+      │       ├── getPostAuthorIdsByPostIds(feedPostIds)
+      │       └── removePostIdsFromFeed(viewerUserId, postsOfTargetAuthor)
+      │
+      └── (D2) Async cleanup queue (fallback)
+          ├── enqueueUnfollowFeedCleanup(viewerUserId, targetAuthorId, unfollowedAtIso)
+          ├── BullMQ worker: unfollow-feed-cleanup.worker
+          ├── processor re-runs cleanup logic
+          └── failed after retries -> push DLQ (unfollow-feed-cleanup-dlq)
+
+
+Return Response
+  ├── mode='unfollowed', followStatus='none'
+  └── mode='cancelled_request', followStatus='none'
+
+
+============================================================
+UPDATE POST HASHTAG + LOCATION FLOW (ARROW STYLE)
+============================================================
+
+Client
+  PATCH /api/v1/posts/:postId
+  body: { caption?, location?, tags? }
+  │
+  ▼
+post.route -> authMiddleware -> post.controller.updatePost
+  │
+  ▼
+post.service.updatePost(userId, postId, payload)
+  │
+  ├── (A) Controller Validate Input
+  │       ├── postId must be positive number
+  │       ├── tags must be string[] if provided
+  │       ├── caption must be string if provided
+  │       └── location must be string if provided
+  │
+  ├── (B) Service Guard + Ownership
+  │       ├── at least one field required: caption | location | tags
+  │       ├── getPostOwnerId(postId)
+  │       ├── post not found -> NotFoundError
+  │       └── owner mismatch -> ForbiddenError (only owner can update)
+  │
+  ├── (C) Normalize Payload
+  │       ├── load current post detail + current tags
+  │       ├── normalizeOptionalText(caption, max=2200)
+  │       ├── normalizeOptionalText(location, max=255)
+  │       ├── normalizeTags(tags)
+  │       │    ├── trim + lowercase
+  │       │    ├── remove prefix '#'
+  │       │    ├── drop empty tags
+  │       │    ├── max 20 tags
+  │       │    ├── each tag max length 50
+  │       │    └── deduplicate
+  │       └── empty text after trim -> null
+  │
+  ├── (D) DB Transaction Update Metadata + Hashtag Mapping
+  │       ├── UPDATE posts
+  │       │    ├── set caption
+  │       │    ├── set location
+  │       │    └── set updated_at = CURRENT_TIMESTAMP
+  │       ├── DELETE post_hashtags WHERE post_id=:postId
+  │       ├── if tags empty -> stop mapping step
+  │       ├── INSERT hashtags (name) with orIgnore
+  │       ├── SELECT hashtag ids by names
+  │       └── INSERT post_hashtags(post_id, hashtag_id)
+  │
+  ├── (E) Cache Refresh (best-effort)
+  │       ├── getFeedCacheDataByPostIds([postId]) from DB
+  │       ├── cachePostCacheDataBatch([postCacheData]) to Redis hash post:data:{postId}
+  │       └── if refresh fail -> log only, request still success
+  │
+  └── (F) Build Response
+          ├── reload updated post detail
+          ├── reload tags by post id
+          └── return { id, caption, location, tags, created_at }
+
+
+Quick Branches:
+- payload has no caption/location/tags -> 400 BadRequest
+- invalid location type or tags type -> 400 BadRequest
+- postId not found -> 404 NotFound
+- user is not post owner -> 403 Forbidden
    

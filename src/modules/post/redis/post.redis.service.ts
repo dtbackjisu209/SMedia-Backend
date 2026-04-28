@@ -66,6 +66,16 @@ class PostRedisService {
 		return rawPostIds.map((id) => Number(id)).filter((id) => Number.isFinite(id));
 	}
 
+	public async getAllFeedPostIds(userId: number): Promise<number[]> {
+		await ensureRedisConnected();
+
+		const rawPostIds = await redisClient.zRange(postRedisKeys.feed(userId), 0, -1, {
+			REV: true,
+		});
+
+		return rawPostIds.map((id) => Number(id)).filter((id) => Number.isFinite(id));
+	}
+
 	public async getPostCacheDataBatch(postIds: number[]): Promise<FeedPostCacheDataDTO[]> {
 		if (postIds.length === 0) {
 			return [];
@@ -157,6 +167,26 @@ class PostRedisService {
 			postRedisKeys.feed(userId),
 			postIds.map((postId) => String(postId)),
 		);
+	}
+
+	public async removePostIdFromFeeds(userIds: number[], postId: number): Promise<void> {
+		if (userIds.length === 0) {
+			return;
+		}
+
+		await ensureRedisConnected();
+
+		const pipeline = redisClient.multi();
+		for (const userId of userIds) {
+			pipeline.zRem(postRedisKeys.feed(userId), String(postId));
+		}
+
+		await pipeline.exec();
+	}
+
+	public async deletePostCache(postId: number): Promise<void> {
+		await ensureRedisConnected();
+		await redisClient.del(postRedisKeys.postData(postId));
 	}
 
 	public async warmFeedWithRecentPosts(userId: number, posts: FeedPostCacheDataDTO[]): Promise<void> {

@@ -14,7 +14,9 @@ export class ExpandNotifications1775200000000 implements MigrationInterface {
         'follow_accept',
         'message',
         'mention',
-        'story_view'
+        'story_view',
+        'new_post',
+        'new_story'
       ) NOT NULL
     `);
     const hasContentColumn = await queryRunner.hasColumn('notifications', 'content');

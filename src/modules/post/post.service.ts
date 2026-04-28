@@ -1,15 +1,23 @@
 import { cloudinary } from '../../core/config/cloudinary.js';
 import { env } from '../../core/config/env.js';
+import { AppDataSource } from '../../data-source.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../../core/handler/error.response.js';
 import type {
 	CloudinaryUploadSignatureDTO,
 	CreatePostPayloadDTO,
 	CreatePostResultDTO,
+	DeletePostResultDTO,
 	FeedPostCacheDataDTO,
+	FeedRankingDebugDTO,
 	GetFeedResultDTO,
 	PostDetailDTO,
+	UpdatePostPayloadDTO,
+	UpdatePostResultDTO,
 	UserInterestDTO,
 } from './post.dto.js';
+import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
+import notificationService from '../notification/notification.service.js';
 import postRepository from './post.repository.js';
 import postRedisService from './redis/post.redis.service.js';
 
@@ -17,6 +25,10 @@ class PostService {
 	private static readonly FEED_LIMIT_DEFAULT = 100;
 	private static readonly FEED_HALF_LIFE_HOURS = 18;
 	private static readonly FEED_ENGAGEMENT_CAP = 500;
+	private static readonly CAPTION_MAX_LENGTH = 2200;
+	private static readonly LOCATION_MAX_LENGTH = 255;
+	private static readonly TAG_MAX_LENGTH = 50;
+	private static readonly TAG_MAX_COUNT = 20;
 
 	public getUploadSignature(): CloudinaryUploadSignatureDTO {
 		const timestamp = Math.floor(Date.now() / 1000);
@@ -44,6 +56,8 @@ class PostService {
 			position: item.position ?? index,
 		}));
 
+		const normalizedTags = this.normalizeTags(payload.tags);
+
 		const sortedMedia = [...media].sort((a, b) => a.position - b.position);
 		const firstMedia = sortedMedia[0];
 
@@ -52,6 +66,7 @@ class PostService {
 			caption: payload.caption,
 			location: payload.location,
 			media,
+			tags: normalizedTags,
 		});
 
 		await enqueuePostFeedFanout({
@@ -66,6 +81,8 @@ class PostService {
 			mediaCount: media.length,
 		});
 
+		await notificationService.notifyFollowersAboutNewPost(userId, savedPost.id);
+
 		const result: CreatePostResultDTO = {
 			id: savedPost.id,
 			caption: savedPost.caption,
@@ -75,7 +92,12 @@ class PostService {
 		return result;
 	}
 
-	public async getFeed(userId: number): Promise<GetFeedResultDTO> {
+	public async getFeed(
+		userId: number,
+		options?: { debugRanking?: boolean },
+	): Promise<GetFeedResultDTO> {
+		const debugRanking = options?.debugRanking ?? false;
+		const shouldLogRanking = debugRanking || process.env.NODE_ENV !== 'production';
 		const postIds = await postRedisService.getFeedPostIds(userId, PostService.FEED_LIMIT_DEFAULT);
 		if (postIds.length === 0) {
 			return { items: [] };
@@ -107,7 +129,7 @@ class PostService {
 			}
 		}
 
-		const rankedItems = postIds
+		const rankedItemsWithDebug = postIds
 			.map((postId) => {
 				const cached = cachedById.get(postId);
 
@@ -115,7 +137,8 @@ class PostService {
 					return null;
 				}
 
-				const rankingScore = this.calculateRankingScore(cached, userInterest);
+				const rankingBreakdown = this.calculateRankingBreakdown(cached, userInterest);
+				const rankingScore = rankingBreakdown.total_score;
 
 				return {
 					id: cached.postId,
@@ -129,13 +152,29 @@ class PostService {
 					thumbnail: cached.thumbnail,
 					media_count: cached.mediaCount,
 					ranking_score: rankingScore,
+					ranking_debug: rankingBreakdown,
 				};
 			})
 			.filter((item): item is NonNullable<typeof item> => item !== null)
 			.sort((a, b) => b.ranking_score - a.ranking_score);
 
+		if (shouldLogRanking) {
+			console.log(
+				'[feed-ranking-debug]',
+				JSON.stringify({
+					user_id: userId,
+					user_interest: userInterest,
+					items: rankedItemsWithDebug,
+				}),
+			);
+		}
+
+		const responseItems = debugRanking
+			? rankedItemsWithDebug
+			: rankedItemsWithDebug.map(({ ranking_debug: _ranking_debug, ...rest }) => rest);
+
 		return {
-			items: rankedItems,
+			items: responseItems,
 		};
 	}
 
@@ -143,7 +182,134 @@ class PostService {
 		return postRepository.getPostDetailById(postId);
 	}
 
+	public async updatePost(
+		userId: number,
+		postId: number,
+		payload: UpdatePostPayloadDTO,
+	): Promise<UpdatePostResultDTO> {
+		const hasAtLeastOneField =
+			payload.caption !== undefined || payload.location !== undefined || payload.tags !== undefined;
+		if (!hasAtLeastOneField) {
+			throw new BadRequestError('At least one field must be provided: caption, location, tags');
+		}
+
+		const ownerId = await postRepository.getPostOwnerId(postId);
+		if (ownerId === null) {
+			throw new NotFoundError(`Post not found with id ${postId}`);
+		}
+
+		if (Number(ownerId) !== Number(userId)) {
+			throw new ForbiddenError('You can only update your own post');
+		}
+
+		const [currentPost, currentTags] = await Promise.all([
+			postRepository.getPostDetailById(postId),
+			postRepository.getTagsByPostId(postId),
+		]);
+
+		const normalizedCaption =
+			payload.caption === undefined
+				? currentPost.caption
+				: this.normalizeOptionalText(payload.caption, PostService.CAPTION_MAX_LENGTH);
+		const normalizedLocation =
+			payload.location === undefined
+				? currentPost.location
+				: this.normalizeOptionalText(payload.location, PostService.LOCATION_MAX_LENGTH);
+		const normalizedTags =
+			payload.tags === undefined ? currentTags : this.normalizeTags(payload.tags);
+
+		await AppDataSource.transaction(async (manager) => {
+			const updated = await postRepository.updatePostMetadataAndTags(
+				postId,
+				{
+					caption: normalizedCaption,
+					location: normalizedLocation,
+					tags: normalizedTags,
+				},
+				manager,
+			);
+
+			if (!updated) {
+				throw new NotFoundError(`Post not found with id ${postId}`);
+			}
+		});
+
+		try {
+			const [cacheData] = await postRepository.getFeedCacheDataByPostIds([postId]);
+			if (cacheData) {
+				await postRedisService.cachePostCacheDataBatch([cacheData]);
+			}
+		} catch (error) {
+			console.error('[post-update] cache refresh failed:', { postId, error });
+		}
+
+		const updatedPost = await postRepository.getPostDetailById(postId);
+		const tags = await postRepository.getTagsByPostId(postId);
+
+		return {
+			id: updatedPost.id,
+			caption: updatedPost.caption,
+			location: updatedPost.location,
+			tags,
+			created_at: updatedPost.created_at,
+		};
+	}
+
+	public async deletePost(userId: number, postId: number): Promise<DeletePostResultDTO> {
+		const candidate = await postRepository.getPostDeleteCandidate(postId);
+		if (!candidate) {
+			throw new NotFoundError(`Post not found with id ${postId}`);
+		}
+
+		if (Number(candidate.authorId) !== Number(userId)) {
+			throw new ForbiddenError('You can only delete your own post');
+		}
+
+		await AppDataSource.transaction(async (manager) => {
+			const deleted = await postRepository.deletePostGraphById(postId, manager);
+			if (!deleted) {
+				throw new NotFoundError(`Post not found with id ${postId}`);
+			}
+		});
+
+		let cleanupStatus: DeletePostResultDTO['cleanupStatus'] = 'queued';
+
+		try {
+			await enqueuePostDeleteCleanup({
+				postId,
+				authorId: candidate.authorId,
+				media: candidate.media,
+				deletedAtIso: new Date().toISOString(),
+			});
+		} catch (error) {
+			console.error('[post-delete] enqueue failed (attempt 1):', error);
+			try {
+				await enqueuePostDeleteCleanup({
+					postId,
+					authorId: candidate.authorId,
+					media: candidate.media,
+					deletedAtIso: new Date().toISOString(),
+				});
+			} catch (retryError) {
+				cleanupStatus = 'queue_failed';
+				console.error('[post-delete] enqueue failed (attempt 2):', retryError);
+			}
+		}
+
+		return {
+			postId,
+			cleanupStatus,
+		};
+	}
+
 	private calculateRankingScore(post: FeedPostCacheDataDTO, userInterest: UserInterestDTO): number {
+		return this.calculateRankingBreakdown(post, userInterest).total_score;
+	}
+
+	private calculateRankingBreakdown(
+		post: FeedPostCacheDataDTO,
+		userInterest: UserInterestDTO,
+	): FeedRankingDebugDTO {
 		const now = Date.now();
 		const ageMs = Math.max(0, now - post.createdAt.getTime());
 		const ageHours = ageMs / (1000 * 60 * 60);
@@ -161,7 +327,15 @@ class PostService {
 
 		const totalScore = boundedEngagement * 0.5 + recencyScore * 0.35 + interestScore * 0.15;
 
-		return Number(totalScore.toFixed(6));
+		return {
+			age_hours: Number(ageHours.toFixed(6)),
+			engagement_raw: engagementRaw,
+			engagement_score: Number(engagementScore.toFixed(6)),
+			bounded_engagement: Number(boundedEngagement.toFixed(6)),
+			recency_score: Number(recencyScore.toFixed(6)),
+			interest_score: Number(interestScore.toFixed(6)),
+			total_score: Number(totalScore.toFixed(6)),
+		};
 	}
 
 	private calculateInterestScore(tags: string[], userInterest: UserInterestDTO): number {
@@ -189,6 +363,39 @@ class PostService {
 
 		const sum = hitScores.reduce((acc, value) => acc + value, 0);
 		return sum / hitScores.length;
+	}
+
+	private normalizeOptionalText(value: string, maxLength: number): string | null {
+		const trimmed = value.trim();
+		if (trimmed.length > maxLength) {
+			throw new BadRequestError(`Text exceeds maximum length ${maxLength}`);
+		}
+
+		return trimmed.length === 0 ? null : trimmed;
+	}
+
+	private normalizeTags(tags: string[] | undefined): string[] {
+		if (tags === undefined) {
+			return [];
+		}
+
+		if (tags.length > PostService.TAG_MAX_COUNT) {
+			throw new BadRequestError(`tags cannot exceed ${PostService.TAG_MAX_COUNT} items`);
+		}
+
+		const normalized = tags
+			.map((tag) => tag.trim().toLowerCase())
+			.filter((tag) => tag.length > 0)
+			.map((tag) => (tag.startsWith('#') ? tag.slice(1) : tag))
+			.filter((tag) => tag.length > 0);
+
+		for (const tag of normalized) {
+			if (tag.length > PostService.TAG_MAX_LENGTH) {
+				throw new BadRequestError(`tag exceeds maximum length ${PostService.TAG_MAX_LENGTH}`);
+			}
+		}
+
+		return Array.from(new Set(normalized));
 	}
 }
 

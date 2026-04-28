@@ -14,6 +14,7 @@ export type CreatePostPayloadDTO = {
 	caption?: string;
 	location?: string;
 	media: CreatePostMediaDTO[];
+	tags?: string[];
 };
 
 export type UpdatePostPayloadDTO = {
@@ -27,6 +28,7 @@ export type CreatePostWithMediaInputDTO = {
 	caption?: string;
 	location?: string;
 	media: PostMediaInputDTO[];
+	tags?: string[];
 };
 
 export type CreatePostResultDTO = {
@@ -93,6 +95,16 @@ export type FeedMediaDTO = {
 	position: number;
 };
 
+export type FeedRankingDebugDTO = {
+	age_hours: number;
+	engagement_raw: number;
+	engagement_score: number;
+	bounded_engagement: number;
+	recency_score: number;
+	interest_score: number;
+	total_score: number;
+};
+
 export type FeedItemDTO = {
 	id: number;
 	caption: string | null;
@@ -105,6 +117,7 @@ export type FeedItemDTO = {
 	thumbnail: string;
 	media_count: number;
 	ranking_score: number;
+	ranking_debug?: FeedRankingDebugDTO;
 };
 
 export type GetFeedResultDTO = {

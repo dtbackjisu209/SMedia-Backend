@@ -9,7 +9,8 @@ class PostController {
 			throw new AuthFailError();
 		}
 
-		const feed = await postService.getFeed(req.userId);
+		const debugRanking = req.query.debugRanking === '1' || req.query.debugRanking === 'true';
+		const feed = await postService.getFeed(req.userId, { debugRanking });
 
 		new OK({
 			message: 'Feed fetched successfully',
@@ -55,10 +56,19 @@ class PostController {
 			throw new BadRequestError('media must be an array of uploaded file urls');
 		}
 
+		if (req.body.tags !== undefined && !Array.isArray(req.body.tags)) {
+			throw new BadRequestError('tags must be an array of strings');
+		}
+
+		if (Array.isArray(req.body.tags) && req.body.tags.some((value: unknown) => typeof value !== 'string')) {
+			throw new BadRequestError('tags must be an array of strings');
+		}
+
 		const post = await postService.createPost(req.userId, {
 			caption: typeof req.body.caption === 'string' ? req.body.caption : undefined,
 			location: typeof req.body.location === 'string' ? req.body.location : undefined,
 			media: req.body.media,
+			tags: Array.isArray(req.body.tags) ? (req.body.tags as string[]) : undefined,
 		});
 
 		new CREATED({

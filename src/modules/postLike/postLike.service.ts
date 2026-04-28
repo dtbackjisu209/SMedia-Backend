@@ -1,8 +1,10 @@
 import { enqueueUserInteraction } from '../post/queues/user-interaction/user-interaction.producer.js';
 
+
 import notificationService from '../notification/notification.service.js';
 
 import { enqueuePostCacheRefresh } from '../post/queues/post-cache-refresh/post-cache-refresh.producer.js';
+
 
 import postRepository from '../post/post.repository.js';
 import postLikeRepository from './postLike.repository.js';
@@ -23,7 +25,9 @@ class PostLikeService {
 		const tags = await postRepository.getTagsByPostId(payload.postId);
 		await enqueueUserInteraction(payload.userId, payload.postId, 'like', tags);
 
+
 		await notificationService.notifyPostLiked(payload.userId, payload.postId);
+
 
 
 		try {

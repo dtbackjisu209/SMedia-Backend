@@ -36,6 +36,7 @@ class PostRepository {
 		const userRepo = AppDataSource.getRepository(User);
 		const postRepo = AppDataSource.getRepository(Post);
 		const postMediaRepo = AppDataSource.getRepository(PostMedia);
+		const tags = payload.tags ?? [];
 
 		const user = await userRepo.findOneBy({ id: payload.userId });
 		if (!user) {
@@ -60,6 +61,33 @@ class PostRepository {
 			});
 
 			await postMediaRepo.save(mediaRows);
+		}
+
+		if (tags.length > 0) {
+			const hashtagRepo = AppDataSource.getRepository(Hashtag);
+			await hashtagRepo
+				.createQueryBuilder()
+				.insert()
+				.into(Hashtag)
+				.values(tags.map((name) => ({ name })))
+				.orIgnore()
+				.execute();
+
+			const hashtagRows = await hashtagRepo
+				.createQueryBuilder('hashtag')
+				.select('hashtag.id', 'id')
+				.addSelect('hashtag.name', 'name')
+				.where('hashtag.name IN (:...names)', { names: tags })
+				.getRawMany<{ id: string; name: string }>();
+
+			if (hashtagRows.length > 0) {
+				const postHashtagRows = hashtagRows.map((row) => ({
+					post_id: savedPost.id,
+					hashtag_id: Number(row.id),
+				}));
+
+				await AppDataSource.getRepository(PostHashtag).insert(postHashtagRows);
+			}
 		}
 
 		return savedPost;

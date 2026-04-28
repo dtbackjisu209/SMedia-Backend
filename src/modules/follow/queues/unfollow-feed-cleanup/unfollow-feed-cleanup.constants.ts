@@ -1,5 +1,5 @@
 import type { JobsOptions } from 'bullmq';
-import { redisQueueConnection } from '../../../../core/config/redis.js';
+import { bullmqRedisConnection } from '../../../../core/config/redis.js';
 
 export const UNFOLLOW_FEED_CLEANUP_QUEUE_NAME = 'unfollow-feed-cleanup';
 export const UNFOLLOW_FEED_CLEANUP_JOB_NAME = 'cleanup-unfollowed-author-from-feed';
@@ -16,4 +16,4 @@ export const DEFAULT_JOB_OPTIONS: JobsOptions = {
 	removeOnComplete: true,
 };
 
-export const redisConnection = redisQueueConnection;
+export const redisConnection = bullmqRedisConnection;

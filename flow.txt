@@ -351,3 +351,33 @@ Quick Branches:
 - postId not found -> 404 NotFound
 - user is not post owner -> 403 Forbidden
    
+comment.service.createComment(payload)
+  │
+  ├── [1] commentRepository.createComment(...)   ← ghi comment vào DB (sync)
+  │
+  ├── [2] postRepository.getTagsByPostId(postId) ← lấy hashtag của bài viết đó
+  │         VD: ['football', 'sport', 'vietnam']
+  │
+  ├── [3] enqueueUserInteraction(userId, postId, 'comment', tags)
+  │         │
+  │         ▼
+  │     BullMQ Queue: "user-interaction"
+  │     (đẩy job vào Redis queue, KHÔNG chờ kết quả → non-blocking)
+  │         │
+  │         ▼ (background worker xử lý bất đồng bộ)
+  │     user-interaction.worker → processUserInteraction(job)
+  │         │
+  │         ├── [A] INSERT user_interactions(user_id, postId, type='comment', tag_snapshot)
+  │         │         → Lưu lịch sử tương tác vào DB (dùng để rebuild Redis khi restart)
+  │         │
+  │         └── [B] delta = INTERACTION_DELTA['comment'] = 2.0
+  │                 postRedisService.incrementUserInterest(userId, tags, 2.0)
+  │                   │
+  │                   ▼
+  │               Redis HINCRBYFLOAT user:interest:{userId} football  +2.0
+  │               Redis HINCRBYFLOAT user:interest:{userId} sport     +2.0
+  │               Redis HINCRBYFLOAT user:interest:{userId} vietnam   +2.0
+  │
+  ├── [4] notificationService.notifyPostCommented(...)  ← thông báo cho chủ bài
+  │
+  └── [5] enqueuePostCacheRefresh(...)  ← cập nhật comment_count trên Redis cache

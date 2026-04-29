@@ -11,10 +11,12 @@ import type {
 	FeedRankingDebugDTO,
 	GetFeedResultDTO,
 	PostDetailDTO,
+	PostDetailWithCommentsDTO,
 	UpdatePostPayloadDTO,
 	UpdatePostResultDTO,
 	UserInterestDTO,
 } from './post.dto.js';
+import commentRepository from '../comment/comment.repository.js';
 import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
 import { enqueuePostCacheRefresh } from './queues/post-cache-refresh/post-cache-refresh.producer.js';
@@ -179,8 +181,24 @@ class PostService {
 		};
 	}
 
-	public async getPostDetail(postId: number): Promise<PostDetailDTO> {
-		return postRepository.getPostDetailById(postId);
+	public async getPostDetail(
+		postId: number,
+		commentLimit = 20,
+	): Promise<PostDetailWithCommentsDTO> {
+		const [post, comments] = await Promise.all([
+			postRepository.getPostDetailById(postId),
+			commentRepository.getCommentsByPost(postId, commentLimit + 1),
+		]);
+
+		const hasMore = comments.length > commentLimit;
+		const pageComments = hasMore ? comments.slice(0, commentLimit) : comments;
+		const nextCursor = hasMore ? pageComments[pageComments.length - 1].id : null;
+
+		return {
+			...post,
+			comments: pageComments,
+			comments_next_cursor: nextCursor,
+		};
 	}
 
 	public async updatePost(

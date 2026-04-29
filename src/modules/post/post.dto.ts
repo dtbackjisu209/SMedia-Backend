@@ -135,6 +135,11 @@ export type PostDetailDTO = {
 	comment_count: number;
 };
 
+export type PostDetailWithCommentsDTO = PostDetailDTO & {
+	comments: import('../comment/comment.dto.js').CommentItemDTO[];
+	comments_next_cursor: number | null;
+};
+
 export type DeletePostCleanupStatusDTO = 'queued' | 'queue_failed';
 
 export type DeletePostResultDTO = {

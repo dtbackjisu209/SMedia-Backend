@@ -17,6 +17,7 @@ import type {
 } from './post.dto.js';
 import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
+import { enqueuePostCacheRefresh } from './queues/post-cache-refresh/post-cache-refresh.producer.js';
 import notificationService from '../notification/notification.service.js';
 import postRepository from './post.repository.js';
 import postRedisService from './redis/post.redis.service.js';
@@ -235,12 +236,13 @@ class PostService {
 		});
 
 		try {
-			const [cacheData] = await postRepository.getFeedCacheDataByPostIds([postId]);
-			if (cacheData) {
-				await postRedisService.cachePostCacheDataBatch([cacheData]);
-			}
+			await enqueuePostCacheRefresh({
+				postId,
+				trigger: 'update',
+				triggeredAtIso: new Date().toISOString(),
+			});
 		} catch (error) {
-			console.error('[post-update] cache refresh failed:', { postId, error });
+			console.error('[post-update] enqueue cache refresh failed:', { postId, error });
 		}
 
 		const updatedPost = await postRepository.getPostDetailById(postId);

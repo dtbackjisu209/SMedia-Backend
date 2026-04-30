@@ -1,6 +1,9 @@
 import { enqueueUserInteraction } from '../post/queues/user-interaction/user-interaction.producer.js';
 import { enqueuePostCacheRefresh } from '../post/queues/post-cache-refresh/post-cache-refresh.producer.js';
 import { ForbiddenError, NotFoundError } from '../../core/handler/error.response.js';
+import { AppDataSource } from '../../data-source.js';
+import { User } from '../../database/entity/user.entity.js';
+import { emitNewCommentToPost } from '../notification/notification.socket.js';
 
 import notificationService from '../notification/notification.service.js';
 import postRepository from '../post/post.repository.js';
@@ -39,8 +42,32 @@ class CommentService {
 			});
 		}
 
+		// Broadcast comment mới đến tất cả người đang xem bài viết (fire-and-forget)
+		AppDataSource.getRepository(User)
+			.findOne({
+				where: { id: payload.userId },
+				select: ['id', 'username', 'full_name', 'avatar_url'],
+			})
+			.then((actor) => {
+				emitNewCommentToPost(payload.postId, {
+					id: result.id,
+					post_id: result.post_id,
+					user_id: result.user_id,
+					username: actor?.username ?? '',
+					full_name: actor?.full_name ?? '',
+					avatar_url: actor?.avatar_url ?? null,
+					content: result.content,
+					parent_id: result.parent_id,
+					created_at: result.created_at,
+				});
+			})
+			.catch(() => {
+				// Không block nếu query user fail
+			});
+
 		return result;
 	}
+
 
 	public async deleteComment(payload: DeleteCommentServiceInputDTO): Promise<DeleteCommentResultDTO> {
 		const { deleted, postId } = await commentRepository.deleteComment(

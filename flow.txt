@@ -381,3 +381,45 @@ comment.service.createComment(payload)
   ├── [4] notificationService.notifyPostCommented(...)  ← thông báo cho chủ bài
   │
   └── [5] enqueuePostCacheRefresh(...)  ← cập nhật comment_count trên Redis cache
+
+Luồng Update Post — Sau Refactor
+Client  PATCH /api/v1/posts/:postId
+  │     body: { caption?, location?, tags? }
+  │
+  ▼
+post.route → authMiddleware → post.controller.updatePost
+  │
+  ▼
+post.service.updatePost(userId, postId, payload)
+  │
+  ├── (A) Guard + Validate
+  │       ├── ít nhất 1 field: caption | location | tags
+  │       ├── getPostOwnerId(postId) → 404 nếu không tồn tại
+  │       └── owner check → 403 nếu không phải chủ
+  │
+  ├── (B) Normalize payload
+  │       ├── normalizeOptionalText(caption, max=2200)
+  │       ├── normalizeOptionalText(location, max=255)
+  │       └── normalizeTags(tags) → trim, lowercase, dedup, max 20
+  │
+  ├── (C) DB Transaction (sync)
+  │       ├── UPDATE posts SET caption, location, updated_at
+  │       ├── DELETE post_hashtags WHERE post_id = ?
+  │       └── INSERT hashtags + post_hashtags (nếu có tags)
+  │
+  ├── (D) enqueuePostCacheRefresh  ← ĐÃ CHUYỂN SANG ASYNC QUEUE
+  │       │   trigger: 'update'
+  │       │
+  │       ▼  (best-effort, lỗi chỉ log, request không fail)
+  │     BullMQ queue: post-cache-refresh
+  │       │
+  │       ▼  (background worker xử lý)
+  │     post-cache-refresh.worker → processPostCacheRefresh(job)
+  │       ├── getFeedCacheDataByPostIds([postId]) from DB
+  │       ├── post tồn tại → cachePostCacheDataBatch([post]) → Redis post:data:{postId}
+  │       └── post không tồn tại → DEL Redis post:data:{postId}
+  │
+  └── (E) Build response (reload từ DB)
+          ├── getPostDetailById(postId)
+          ├── getTagsByPostId(postId)
+          └── return { id, caption, location, tags, created_at }

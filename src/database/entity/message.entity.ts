@@ -27,6 +27,13 @@ export class Message {
   @Column({ type: 'boolean', default: false })
   is_recalled!: boolean;
 
+  @ManyToOne(() => Message, { nullable: true })
+  @JoinColumn({ name: 'reply_to_message_id' })
+  reply_to_message!: Message | null;
+
+  @Column('text', { nullable: true })
+  reactions!: string | null;
+
   @CreateDateColumn()
   created_at!: Date;
 }

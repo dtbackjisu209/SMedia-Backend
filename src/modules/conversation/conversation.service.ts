@@ -12,6 +12,73 @@ export class ChatService {
   private memberRepo = AppDataSource.getRepository(ConversationMember);
   private userRepo = AppDataSource.getRepository(User);
 
+  private readonly recalledMessageText = 'Tin nhan da duoc thu hoi.';
+  private readonly unavailableReplyText = 'Tin nhan khong con kha dung.';
+
+  private parseMessageReactions(raw: string | null | undefined): Array<{ emoji: string; userIds: number[] }> {
+    if (!raw) return [];
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .map((entry) => {
+          const rawUserIds = (entry as { userIds?: unknown[] }).userIds;
+          return {
+            emoji: String((entry as { emoji?: unknown }).emoji ?? '').trim(),
+            userIds: Array.isArray(rawUserIds)
+              ? rawUserIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+              : [],
+          };
+        })
+        .filter((entry) => entry.emoji && entry.userIds.length > 0);
+    } catch {
+      return [];
+    }
+  }
+
+  private serializeMessageReactions(reactions: Array<{ emoji: string; userIds: number[] }>): string | null {
+    const normalized = reactions
+      .map((entry) => ({
+        emoji: String(entry.emoji ?? '').trim(),
+        userIds: Array.from(new Set(entry.userIds.filter((id) => Number.isFinite(id) && id > 0))),
+      }))
+      .filter((entry) => entry.emoji && entry.userIds.length > 0);
+
+    return normalized.length > 0 ? JSON.stringify(normalized) : null;
+  }
+
+  private buildReactionDto(message: Message) {
+    return this.parseMessageReactions(message.reactions).map((entry) => ({
+      emoji: entry.emoji,
+      count: entry.userIds.length,
+      user_ids: entry.userIds.map((id) => String(id)),
+    }));
+  }
+
+  private buildReplyDto(message: Message | null | undefined, viewerUserId?: number) {
+    if (!message?.sender) return null;
+
+    const hiddenForViewer =
+      Number.isFinite(viewerUserId) && viewerUserId
+        ? this.isMessageDeletedForUser(message, Number(viewerUserId))
+        : false;
+
+    return {
+      id: String(message.id),
+      sender_id: String(message.sender.id),
+      sender_name: (message.sender as any)?.full_name || (message.sender as any)?.username || 'Unknown',
+      content: hiddenForViewer
+        ? this.unavailableReplyText
+        : message.is_recalled
+          ? this.recalledMessageText
+          : message.content,
+      is_recalled: Boolean(message.is_recalled),
+      is_unavailable: hiddenForViewer,
+    };
+  }
+
   private parseDeletedForUserIds(raw: string | null | undefined): number[] {
     if (!raw) return [];
 
@@ -64,11 +131,13 @@ export class ChatService {
     return {
       id: String(message.id),
       conversation_id: String(conversationId),
-      content: message.is_recalled ? 'Tin nhan da duoc thu hoi.' : message.content,
+      content: message.is_recalled ? this.recalledMessageText : message.content,
       sender_id: String(message.sender.id),
       sender_name: (message.sender as any)?.full_name || (message.sender as any)?.username || 'Unknown',
       created_at: message.created_at,
       is_recalled: Boolean(message.is_recalled),
+      reply_to: this.buildReplyDto(message.reply_to_message, viewerUserId),
+      reactions: this.buildReactionDto(message),
     };
   }
 
@@ -171,7 +240,7 @@ export class ChatService {
           ? {
               id: lastVisibleMessage.id,
               conversation_id: String(convId),
-              content: lastVisibleMessage.is_recalled ? 'Tin nhan da duoc thu hoi.' : lastVisibleMessage.content,
+              content: lastVisibleMessage.is_recalled ? this.recalledMessageText : lastVisibleMessage.content,
               sender_name:
                 (lastVisibleMessage.sender as any)?.full_name ||
                 (lastVisibleMessage.sender as any)?.username ||
@@ -186,42 +255,62 @@ export class ChatService {
     return results;
   }
 
-  async saveMessage(conversationId: string, senderId: string, content: string) {
-    await this.assertConversationMember(Number(conversationId), Number(senderId));
+  async saveMessage(conversationId: string, senderId: string, content: string, replyToMessageId?: string | null) {
+    const normalizedConversationId = Number(conversationId);
+    const normalizedSenderId = Number(senderId);
+
+    await this.assertConversationMember(normalizedConversationId, normalizedSenderId);
+
+    let replyToMessage: Message | null = null;
+    if (replyToMessageId) {
+      const normalizedReplyId = Number(replyToMessageId);
+      if (!Number.isFinite(normalizedReplyId) || normalizedReplyId <= 0) {
+        throw new Error('Invalid reply target');
+      }
+
+      replyToMessage = await this.messageRepo.findOne({
+        where: { id: normalizedReplyId },
+        relations: ['conversation', 'sender'],
+      });
+
+      if (!replyToMessage || Number((replyToMessage.conversation as any)?.id) !== normalizedConversationId) {
+        throw new Error('Reply target not found in this conversation');
+      }
+    }
 
     const newMessage = this.messageRepo.create({
-      conversation: { id: Number(conversationId) } as any,
-      sender: { id: Number(senderId) } as any,
+      conversation: { id: normalizedConversationId } as any,
+      sender: { id: normalizedSenderId } as any,
       content,
       deleted_for_user_ids: null,
       is_recalled: false,
+      reply_to_message: replyToMessage ? ({ id: Number(replyToMessage.id) } as any) : null,
+      reactions: null,
     });
 
     const savedMsg = await this.messageRepo.save(newMessage);
 
     const fullMsg = await this.messageRepo.findOne({
       where: { id: savedMsg.id },
-      relations: ['sender'],
+      relations: ['sender', 'reply_to_message', 'reply_to_message.sender'],
     });
 
-    return {
-      id: String(fullMsg?.id ?? ''),
-      conversation_id: String(conversationId),
-      sender_id: String(senderId),
-      sender_name:
-        (fullMsg?.sender as any)?.full_name ||
-        (fullMsg?.sender as any)?.username ||
-        'User',
-      content: fullMsg?.content,
-      created_at: fullMsg?.created_at,
-      is_recalled: Boolean(fullMsg?.is_recalled),
-    };
+    if (!fullMsg) {
+      throw new Error('Could not load saved message');
+    }
+
+    const dto = this.toMessageDto(fullMsg, conversationId);
+    if (!dto) {
+      throw new Error('Could not serialize saved message');
+    }
+
+    return dto;
   }
 
   async getConversationMessages(conversationId: string, limit = 50, offset = 0, viewerUserId?: number) {
     const messages = await this.messageRepo.find({
       where: { conversation: { id: Number(conversationId) } },
-      relations: ['sender'],
+      relations: ['sender', 'reply_to_message', 'reply_to_message.sender'],
       order: { created_at: 'ASC' },
       take: limit,
       skip: offset,
@@ -296,7 +385,7 @@ export class ChatService {
     }
 
     message.is_recalled = true;
-    message.content = 'Tin nhan da duoc thu hoi.';
+    message.content = this.recalledMessageText;
     message.media_url = null as any;
     await this.messageRepo.save(message);
 
@@ -306,6 +395,57 @@ export class ChatService {
       mode: 'everyone' as const,
       content: message.content,
       is_recalled: true,
+    };
+  }
+
+  async toggleMessageReaction(messageId: string | number, userId: string | number, emoji: string) {
+    const normalizedMessageId = Number(messageId);
+    const normalizedUserId = Number(userId);
+    const normalizedEmoji = String(emoji ?? '').trim();
+
+    if (!Number.isFinite(normalizedMessageId) || normalizedMessageId <= 0) {
+      throw new Error('Invalid message id');
+    }
+
+    if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) {
+      throw new Error('Invalid user id');
+    }
+
+    if (!normalizedEmoji || normalizedEmoji.length > 16) {
+      throw new Error('Invalid reaction');
+    }
+
+    const message = await this.messageRepo.findOne({
+      where: { id: normalizedMessageId },
+      relations: ['conversation'],
+    });
+
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    await this.assertConversationMember(Number((message.conversation as any).id), normalizedUserId);
+
+    const reactions = this.parseMessageReactions(message.reactions);
+    const target = reactions.find((entry) => entry.emoji === normalizedEmoji);
+
+    if (target) {
+      if (target.userIds.includes(normalizedUserId)) {
+        target.userIds = target.userIds.filter((id) => id !== normalizedUserId);
+      } else {
+        target.userIds.push(normalizedUserId);
+      }
+    } else {
+      reactions.push({ emoji: normalizedEmoji, userIds: [normalizedUserId] });
+    }
+
+    message.reactions = this.serializeMessageReactions(reactions);
+    await this.messageRepo.save(message);
+
+    return {
+      messageId: String(message.id),
+      conversationId: String((message.conversation as any).id),
+      reactions: this.buildReactionDto(message),
     };
   }
 

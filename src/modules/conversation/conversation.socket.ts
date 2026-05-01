@@ -94,11 +94,18 @@ export const chatSocket = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('send_message', async (data: { conversationId: string; senderId: string; content: string }) => {
+  socket.on(
+    'send_message',
+    async (data: { conversationId: string; senderId: string; content: string; replyToMessageId?: string | null }) => {
     try {
       if (!data.content || !data.content.trim()) return;
 
-      const savedMsg = await chatService.saveMessage(data.conversationId, data.senderId, data.content);
+      const savedMsg = await chatService.saveMessage(
+        data.conversationId,
+        data.senderId,
+        data.content,
+        data.replyToMessageId ?? null,
+      );
       const roomName = `conversation_${data.conversationId}`;
       io.to(roomName).emit('new_message', savedMsg);
 
@@ -129,7 +136,8 @@ export const chatSocket = (io: Server, socket: Socket) => {
       console.error('[Socket Error] send_message:', error);
       socket.emit('error', 'Could not send message');
     }
-  });
+  },
+  );
 
   socket.on(
     'delete_message',
@@ -138,7 +146,10 @@ export const chatSocket = (io: Server, socket: Socket) => {
       ack?: (payload: { success: boolean; message?: string }) => void,
     ) => {
     try {
-      if (!data?.messageId || !data?.userId || !data?.mode) return;
+      if (!data?.messageId || !data?.userId || !data?.mode) {
+        ack?.({ success: false, message: 'Invalid delete message payload' });
+        return;
+      }
 
       if (data.mode === 'self') {
         const result = await chatService.deleteMessageForSelf(data.messageId, data.userId);
@@ -153,6 +164,30 @@ export const chatSocket = (io: Server, socket: Socket) => {
     } catch (error) {
       console.error('[Socket Error] delete_message:', error);
       const message = error instanceof Error ? error.message : 'Could not delete message';
+      socket.emit('chat_error', message);
+      ack?.({ success: false, message });
+    }
+  },
+  );
+
+  socket.on(
+    'toggle_message_reaction',
+    async (
+      data: { messageId: string; userId: string; emoji: string },
+      ack?: (payload: { success: boolean; message?: string }) => void,
+    ) => {
+    try {
+      if (!data?.messageId || !data?.userId || !data?.emoji) {
+        ack?.({ success: false, message: 'Invalid reaction payload' });
+        return;
+      }
+
+      const result = await chatService.toggleMessageReaction(data.messageId, data.userId, data.emoji);
+      io.to(`conversation_${result.conversationId}`).emit('message_reaction_updated', result);
+      ack?.({ success: true });
+    } catch (error) {
+      console.error('[Socket Error] toggle_message_reaction:', error);
+      const message = error instanceof Error ? error.message : 'Could not update reaction';
       socket.emit('chat_error', message);
       ack?.({ success: false, message });
     }

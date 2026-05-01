@@ -1,6 +1,10 @@
 import type { EntityManager } from 'typeorm';
 import { BadRequestError, NotFoundError } from '../../core/handler/error.response.js';
+import { AppDataSource } from '../../data-source.js';
 import type { Notification } from '../../database/entity/notification.entity.js';
+import { User } from '../../database/entity/user.entity.js';
+import { getFollowerIdsByUserId } from '../follow/follow.repository.js';
+import postRepository from '../post/post.repository.js';
 import notificationRepository from './notification.repository.js';
 import type {
   CreateNotificationDto,
@@ -99,6 +103,107 @@ class NotificationService {
 
   emitNotification(userId: number, item: NotificationItemDto): void {
     emitNotificationToUser(userId, item);
+  }
+
+  async notifyPostLiked(actorUserId: number, postId: number): Promise<void> {
+    await this.notifyPostOwnerAboutInteraction(actorUserId, postId, {
+      type: 'like',
+      buildContent: (actorName) => `${actorName} liked your post.`,
+    });
+  }
+
+  async notifyPostCommented(actorUserId: number, postId: number): Promise<void> {
+    await this.notifyPostOwnerAboutInteraction(actorUserId, postId, {
+      type: 'comment',
+      buildContent: (actorName) => `${actorName} commented on your post.`,
+    });
+  }
+
+  async notifyFollowersAboutNewPost(authorId: number, postId: number): Promise<void> {
+    await this.notifyFollowers(authorId, {
+      type: 'new_post',
+      referenceId: postId,
+      buildContent: (authorName) => `${authorName} shared a new post.`,
+    });
+  }
+
+  async notifyFollowersAboutNewStory(authorId: number, storyId: number): Promise<void> {
+    await this.notifyFollowers(authorId, {
+      type: 'new_story',
+      referenceId: storyId,
+      buildContent: (authorName) => `${authorName} added a new story.`,
+    });
+  }
+
+  private async notifyFollowers(
+    authorId: number,
+    input: {
+      type: CreateNotificationDto['type'];
+      referenceId: number;
+      buildContent: (authorName: string) => string;
+    },
+  ): Promise<void> {
+    if (!Number.isFinite(authorId) || authorId <= 0) {
+      return;
+    }
+
+    const [author, followerIds] = await Promise.all([
+      AppDataSource.getRepository(User).findOne({
+        where: { id: authorId },
+        select: ['id', 'username', 'full_name'],
+      }),
+      getFollowerIdsByUserId(authorId),
+    ]);
+
+    if (!author || followerIds.length === 0) {
+      return;
+    }
+
+    const authorName = author.full_name || author.username;
+    const content = input.buildContent(authorName);
+
+    const items = followerIds.map((userId) =>
+      this.createNotification({
+        userId,
+        type: input.type,
+        referenceId: input.referenceId,
+        content,
+      }),
+    );
+
+    await Promise.all(items);
+  }
+
+  private async notifyPostOwnerAboutInteraction(
+    actorUserId: number,
+    postId: number,
+    input: {
+      type: Extract<CreateNotificationDto['type'], 'like' | 'comment'>;
+      buildContent: (actorName: string) => string;
+    },
+  ): Promise<void> {
+    if (!Number.isFinite(actorUserId) || actorUserId <= 0 || !Number.isFinite(postId) || postId <= 0) {
+      return;
+    }
+
+    const [postOwnerId, actor] = await Promise.all([
+      postRepository.getPostOwnerId(postId),
+      AppDataSource.getRepository(User).findOne({
+        where: { id: actorUserId },
+        select: ['id', 'username', 'full_name'],
+      }),
+    ]);
+
+    if (!postOwnerId || !actor || Number(postOwnerId) === Number(actorUserId)) {
+      return;
+    }
+
+    await this.createNotification({
+      userId: postOwnerId,
+      type: input.type,
+      referenceId: postId,
+      content: input.buildContent(actor.full_name || actor.username),
+    });
   }
 }
 

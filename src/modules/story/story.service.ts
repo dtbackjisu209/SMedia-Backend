@@ -5,6 +5,7 @@ import { Follow } from '../../database/entity/follow.entity.js';
 import { cloudinary } from '../../core/config/cloudinary.js';
 import { In, MoreThan } from 'typeorm';
 import fs from 'fs';
+import notificationService from '../notification/notification.service.js';
 
 class StoryService {
     private storyRepository = AppDataSource.getRepository(Story);
@@ -86,7 +87,9 @@ class StoryService {
             created_at: new Date()
         });
 
-        return await this.storyRepository.save(story);
+        const savedStory = await this.storyRepository.save(story);
+        await notificationService.notifyFollowersAboutNewStory(userId, savedStory.id);
+        return savedStory;
     }
 }
 

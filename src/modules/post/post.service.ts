@@ -8,14 +8,19 @@ import type {
 	CreatePostResultDTO,
 	DeletePostResultDTO,
 	FeedPostCacheDataDTO,
+	FeedRankingDebugDTO,
 	GetFeedResultDTO,
 	PostDetailDTO,
+	PostDetailWithCommentsDTO,
 	UpdatePostPayloadDTO,
 	UpdatePostResultDTO,
 	UserInterestDTO,
 } from './post.dto.js';
+import commentRepository from '../comment/comment.repository.js';
 import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
+import { enqueuePostCacheRefresh } from './queues/post-cache-refresh/post-cache-refresh.producer.js';
+import notificationService from '../notification/notification.service.js';
 import postRepository from './post.repository.js';
 import postRedisService from './redis/post.redis.service.js';
 
@@ -54,6 +59,8 @@ class PostService {
 			position: item.position ?? index,
 		}));
 
+		const normalizedTags = this.normalizeTags(payload.tags);
+
 		const sortedMedia = [...media].sort((a, b) => a.position - b.position);
 		const firstMedia = sortedMedia[0];
 
@@ -62,6 +69,7 @@ class PostService {
 			caption: payload.caption,
 			location: payload.location,
 			media,
+			tags: normalizedTags,
 		});
 
 		await enqueuePostFeedFanout({
@@ -76,6 +84,8 @@ class PostService {
 			mediaCount: media.length,
 		});
 
+		await notificationService.notifyFollowersAboutNewPost(userId, savedPost.id);
+
 		const result: CreatePostResultDTO = {
 			id: savedPost.id,
 			caption: savedPost.caption,
@@ -85,7 +95,12 @@ class PostService {
 		return result;
 	}
 
-	public async getFeed(userId: number): Promise<GetFeedResultDTO> {
+	public async getFeed(
+		userId: number,
+		options?: { debugRanking?: boolean },
+	): Promise<GetFeedResultDTO> {
+		const debugRanking = options?.debugRanking ?? false;
+		const shouldLogRanking = debugRanking || process.env.NODE_ENV !== 'production';
 		const postIds = await postRedisService.getFeedPostIds(userId, PostService.FEED_LIMIT_DEFAULT);
 		if (postIds.length === 0) {
 			return { items: [] };
@@ -117,7 +132,7 @@ class PostService {
 			}
 		}
 
-		const rankedItems = postIds
+		const rankedItemsWithDebug = postIds
 			.map((postId) => {
 				const cached = cachedById.get(postId);
 
@@ -125,7 +140,8 @@ class PostService {
 					return null;
 				}
 
-				const rankingScore = this.calculateRankingScore(cached, userInterest);
+				const rankingBreakdown = this.calculateRankingBreakdown(cached, userInterest);
+				const rankingScore = rankingBreakdown.total_score;
 
 				return {
 					id: cached.postId,
@@ -139,18 +155,50 @@ class PostService {
 					thumbnail: cached.thumbnail,
 					media_count: cached.mediaCount,
 					ranking_score: rankingScore,
+					ranking_debug: rankingBreakdown,
 				};
 			})
 			.filter((item): item is NonNullable<typeof item> => item !== null)
 			.sort((a, b) => b.ranking_score - a.ranking_score);
 
+		if (shouldLogRanking) {
+			console.log(
+				'[feed-ranking-debug]',
+				JSON.stringify({
+					user_id: userId,
+					user_interest: userInterest,
+					items: rankedItemsWithDebug,
+				}),
+			);
+		}
+
+		const responseItems = debugRanking
+			? rankedItemsWithDebug
+			: rankedItemsWithDebug.map(({ ranking_debug: _ranking_debug, ...rest }) => rest);
+
 		return {
-			items: rankedItems,
+			items: responseItems,
 		};
 	}
 
-	public async getPostDetail(postId: number): Promise<PostDetailDTO> {
-		return postRepository.getPostDetailById(postId);
+	public async getPostDetail(
+		postId: number,
+		commentLimit = 20,
+	): Promise<PostDetailWithCommentsDTO> {
+		const [post, comments] = await Promise.all([
+			postRepository.getPostDetailById(postId),
+			commentRepository.getCommentsByPost(postId, commentLimit + 1),
+		]);
+
+		const hasMore = comments.length > commentLimit;
+		const pageComments = hasMore ? comments.slice(0, commentLimit) : comments;
+		const nextCursor = hasMore ? pageComments[pageComments.length - 1].id : null;
+
+		return {
+			...post,
+			comments: pageComments,
+			comments_next_cursor: nextCursor,
+		};
 	}
 
 	public async updatePost(
@@ -206,12 +254,13 @@ class PostService {
 		});
 
 		try {
-			const [cacheData] = await postRepository.getFeedCacheDataByPostIds([postId]);
-			if (cacheData) {
-				await postRedisService.cachePostCacheDataBatch([cacheData]);
-			}
+			await enqueuePostCacheRefresh({
+				postId,
+				trigger: 'update',
+				triggeredAtIso: new Date().toISOString(),
+			});
 		} catch (error) {
-			console.error('[post-update] cache refresh failed:', { postId, error });
+			console.error('[post-update] enqueue cache refresh failed:', { postId, error });
 		}
 
 		const updatedPost = await postRepository.getPostDetailById(postId);
@@ -274,6 +323,13 @@ class PostService {
 	}
 
 	private calculateRankingScore(post: FeedPostCacheDataDTO, userInterest: UserInterestDTO): number {
+		return this.calculateRankingBreakdown(post, userInterest).total_score;
+	}
+
+	private calculateRankingBreakdown(
+		post: FeedPostCacheDataDTO,
+		userInterest: UserInterestDTO,
+	): FeedRankingDebugDTO {
 		const now = Date.now();
 		const ageMs = Math.max(0, now - post.createdAt.getTime());
 		const ageHours = ageMs / (1000 * 60 * 60);
@@ -291,7 +347,15 @@ class PostService {
 
 		const totalScore = boundedEngagement * 0.5 + recencyScore * 0.35 + interestScore * 0.15;
 
-		return Number(totalScore.toFixed(6));
+		return {
+			age_hours: Number(ageHours.toFixed(6)),
+			engagement_raw: engagementRaw,
+			engagement_score: Number(engagementScore.toFixed(6)),
+			bounded_engagement: Number(boundedEngagement.toFixed(6)),
+			recency_score: Number(recencyScore.toFixed(6)),
+			interest_score: Number(interestScore.toFixed(6)),
+			total_score: Number(totalScore.toFixed(6)),
+		};
 	}
 
 	private calculateInterestScore(tags: string[], userInterest: UserInterestDTO): number {

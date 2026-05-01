@@ -10,6 +10,8 @@ export const notificationTypes = [
   'message',
   'mention',
   'story_view',
+  'new_post',
+  'new_story',
 ] as const;
 
 export type NotificationType = (typeof notificationTypes)[number];

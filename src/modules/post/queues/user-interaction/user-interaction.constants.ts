@@ -1,5 +1,5 @@
 import type { JobsOptions } from 'bullmq';
-import { redisQueueConnection } from '../../../../core/config/redis.js';
+import { bullmqRedisConnection } from '../../../../core/config/redis.js';
 
 export const USER_INTERACTION_QUEUE_NAME = 'user-interaction';
 export const USER_INTERACTION_JOB_NAME = 'track-user-interaction';
@@ -16,4 +16,4 @@ export const DEFAULT_JOB_OPTIONS: JobsOptions = {
 	removeOnComplete: true,
 };
 
-export const redisConnection = redisQueueConnection;
+export const redisConnection = bullmqRedisConnection;

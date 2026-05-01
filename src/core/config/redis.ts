@@ -1,3 +1,4 @@
+import { Redis } from 'ioredis';
 import { createClient } from 'redis';
 import { env } from './env.js';
 
@@ -37,6 +38,13 @@ export const getRedisConnectionByType = (type: RedisType): RedisConnectionConfig
 
 export const redisFanoutConnection = getRedisConnectionByType('fanout');
 export const redisQueueConnection = getRedisConnectionByType('queue');
+
+// Shared IORedis instance for BullMQ workers and queues.
+export const bullmqRedisConnection = new Redis({
+	...redisQueueConnection,
+	maxRetriesPerRequest: null,
+	enableReadyCheck: false,
+});
 
 export const fanoutRedisClient = createClient({
 	url: env.redis.url,

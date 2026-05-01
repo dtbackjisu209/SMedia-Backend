@@ -9,7 +9,11 @@ import { AddUserInteractionsTable1775000000000 } from './database/migrations/177
 import { AddPostUpdatedAt1775300000000 } from './database/migrations/1775300000000-add-post-updated-at.js';
 import { ExpandNotifications1775200000000 } from './database/migrations/1775200000000-expand-notifications.js';
 import { AddNotificationHiddenFlag1775300000000 } from './database/migrations/1775300000000-add-notification-hidden-flag.js';
+
 import { AddMessageRepliesAndReactions1775400000000 } from './database/migrations/1775400000000-add-message-replies-and-reactions.js';
+
+import { AddNewPostNotificationTypes1775400000000 } from './database/migrations/1775400000000-add-new-post-notification-types.js';
+
 import {
   User,
   Post,
@@ -63,7 +67,11 @@ export const AppDataSource = new DataSource({
     AddPostUpdatedAt1775300000000,
     ExpandNotifications1775200000000,
     AddNotificationHiddenFlag1775300000000,
+
     AddMessageRepliesAndReactions1775400000000,
+
+    AddNewPostNotificationTypes1775400000000,
+
   ],
   migrationsRun: true,
 });

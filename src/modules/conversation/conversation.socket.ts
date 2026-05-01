@@ -109,6 +109,9 @@ export const chatSocket = (io: Server, socket: Socket) => {
 
       await Promise.all(
         recipientIds.map(async (recipientId) => {
+          const isMuted = await chatService.isConversationMutedForUser(data.conversationId, recipientId);
+          if (isMuted) return;
+
           const isReadingThisConversation = await hasRecipientOpenedConversation(io, recipientId, data.conversationId);
           if (isReadingThisConversation) return;
 
@@ -127,6 +130,34 @@ export const chatSocket = (io: Server, socket: Socket) => {
       socket.emit('error', 'Could not send message');
     }
   });
+
+  socket.on(
+    'delete_message',
+    async (
+      data: { messageId: string; userId: string; mode: 'self' | 'everyone' },
+      ack?: (payload: { success: boolean; message?: string }) => void,
+    ) => {
+    try {
+      if (!data?.messageId || !data?.userId || !data?.mode) return;
+
+      if (data.mode === 'self') {
+        const result = await chatService.deleteMessageForSelf(data.messageId, data.userId);
+        socket.emit('message_deleted', result);
+        ack?.({ success: true });
+        return;
+      }
+
+      const result = await chatService.recallMessageForEveryone(data.messageId, data.userId);
+      io.to(`conversation_${result.conversationId}`).emit('message_deleted', result);
+      ack?.({ success: true });
+    } catch (error) {
+      console.error('[Socket Error] delete_message:', error);
+      const message = error instanceof Error ? error.message : 'Could not delete message';
+      socket.emit('chat_error', message);
+      ack?.({ success: false, message });
+    }
+  },
+  );
 
   socket.on('typing', (data: { conversationId: string; senderName: string }) => {
     const roomName = `conversation_${data.conversationId}`;

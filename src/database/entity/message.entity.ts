@@ -1,4 +1,4 @@
-import {Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { Conversation } from './conversation.entity.js';
 import { User } from './user.entity.js';
 
@@ -20,6 +20,12 @@ export class Message {
 
   @Column('text', { nullable: true })
   media_url!: string;
+
+  @Column('text', { nullable: true })
+  deleted_for_user_ids!: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  is_recalled!: boolean;
 
   @CreateDateColumn()
   created_at!: Date;

@@ -112,7 +112,6 @@ export const chatSocket = (io: Server, socket: Socket) => {
       const senderId = Number(data.senderId);
       const memberIds = await chatService.getConversationMemberIds(data.conversationId);
       const recipientIds = memberIds.filter((memberId) => memberId !== senderId);
-      const preview = data.content.trim().slice(0, 80);
 
       await Promise.all(
         recipientIds.map(async (recipientId) => {
@@ -126,7 +125,7 @@ export const chatSocket = (io: Server, socket: Socket) => {
             userId: recipientId,
             type: 'message',
             referenceId: Number(data.conversationId),
-            content: `${savedMsg.sender_name} sent you a message: ${preview}`,
+            content: `${savedMsg.sender_name} đã nhắn tin cho bạn, nhấn vào để xem chi tiết.`,
           });
         }),
       );
@@ -197,13 +196,16 @@ export const chatSocket = (io: Server, socket: Socket) => {
   socket.on('typing', (data: { conversationId: string; senderName: string }) => {
     const roomName = `conversation_${data.conversationId}`;
     socket.to(roomName).emit('user_typing', {
+      conversationId: String(data.conversationId),
       message: `${data.senderName} is typing...`,
     });
   });
 
   socket.on('stop_typing', (data: { conversationId: string }) => {
     const roomName = `conversation_${data.conversationId}`;
-    socket.to(roomName).emit('user_stop_typing');
+    socket.to(roomName).emit('user_stop_typing', {
+      conversationId: String(data.conversationId),
+    });
   });
 
   socket.on('request_presence_snapshot', () => {

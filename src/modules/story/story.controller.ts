@@ -33,6 +33,19 @@ class StoryController {
 			data: stories,
 		}).send(res);
 	}
+
+	public async deleteStory(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		const { id } = req.params;
+		await storyService.deleteStory(req.userId, Number(id));
+
+		new OK({
+			message: 'Story deleted successfully',
+		}).send(res);
+	}
 }
 
 export default new StoryController();

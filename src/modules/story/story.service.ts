@@ -91,6 +91,28 @@ class StoryService {
         await notificationService.notifyFollowersAboutNewStory(userId, savedStory.id);
         return savedStory;
     }
+
+    public async deleteStory(userId: number, storyId: number) {
+        const story = await this.storyRepository.findOne({
+            where: { id: storyId },
+            relations: ['user']
+        });
+
+        if (!story) throw new Error('Story not found');
+        
+        console.log('Delete attempt:', {
+            requestUserId: userId,
+            requestUserIdType: typeof userId,
+            storyUserId: story.user.id,
+            storyUserIdType: typeof story.user.id
+        });
+
+        if (Number(story.user.id) !== Number(userId)) {
+            throw new Error('You are not authorized to delete this story');
+        }
+
+        await this.storyRepository.remove(story);
+    }
 }
 
 export default new StoryService();

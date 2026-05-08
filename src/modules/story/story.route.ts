@@ -13,6 +13,8 @@ router.post(
 	asyncHandler(storyController.createStory),
 );
 
+router.delete('/:id', authMiddleware, asyncHandler(storyController.deleteStory));
+
 router.get('/feed', authMiddleware, asyncHandler(storyController.getStoryFeed));
 
 export default router;

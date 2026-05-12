@@ -152,23 +152,27 @@ class PostRepository {
 			throw new NotFoundError(`Post not found with id ${postId}`);
 		}
 
-		const mediaRows = await AppDataSource.getRepository(PostMedia)
-			.createQueryBuilder('media')
-			.select('media.media_url', 'media_url')
-			.addSelect('media.media_type', 'media_type')
-			.addSelect('media.position', 'position')
-			.where('media.post_id = :postId', { postId })
-			.orderBy('media.position', 'ASC')
-			.getRawMany<{
-				media_url: string;
-				media_type: 'image' | 'video';
-				position: number;
-			}>();
+		const [mediaRows, tags] = await Promise.all([
+			AppDataSource.getRepository(PostMedia)
+				.createQueryBuilder('media')
+				.select('media.media_url', 'media_url')
+				.addSelect('media.media_type', 'media_type')
+				.addSelect('media.position', 'position')
+				.where('media.post_id = :postId', { postId })
+				.orderBy('media.position', 'ASC')
+				.getRawMany<{
+					media_url: string;
+					media_type: 'image' | 'video';
+					position: number;
+				}>(),
+			this.getTagsByPostId(postId),
+		]);
 
 		return {
 			id: Number(postRow.post_id),
 			caption: postRow.post_caption,
 			location: postRow.post_location,
+			tags,
 			created_at: new Date(postRow.post_created_at),
 			author: {
 				id: Number(postRow.author_id),

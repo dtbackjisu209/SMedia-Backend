@@ -79,6 +79,7 @@ class PostService {
 			userId,
 			caption: savedPost.caption,
 			location: savedPost.location,
+			tags: normalizedTags,
 			createdAtIso: new Date(savedPost.created_at).toISOString(),
 			likeCount: savedPost.like_count ?? 0,
 			commentCount: savedPost.comment_count ?? 0,

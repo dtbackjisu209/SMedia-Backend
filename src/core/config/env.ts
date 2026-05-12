@@ -25,5 +25,9 @@ export const env = {
 		url: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
 		queueUrl: process.env.REDIS_URL_QUEUE || process.env.REDIS_URL || 'redis://127.0.0.1:6379',
 	},
+	gemini: {
+		apiKey: process.env.GEMINI_API_KEY || process.env.gemini_api_key || '',
+		model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+	},
 };
 

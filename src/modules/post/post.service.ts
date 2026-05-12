@@ -17,6 +17,7 @@ import type {
 	UserInterestDTO,
 } from './post.dto.js';
 import commentRepository from '../comment/comment.repository.js';
+import { enqueueAiModeration } from './queues/ai-moderation/ai-moderation.producer.js';
 import { enqueuePostDeleteCleanup } from './queues/post-delete/post-delete.producer.js';
 import { enqueuePostFeedFanout } from './queues/post-fanout/post-fanout.producer.js';
 import { enqueuePostCacheRefresh } from './queues/post-cache-refresh/post-cache-refresh.producer.js';
@@ -28,6 +29,7 @@ class PostService {
 	private static readonly FEED_LIMIT_DEFAULT = 100;
 	private static readonly FEED_HALF_LIFE_HOURS = 18;
 	private static readonly FEED_ENGAGEMENT_CAP = 500;
+	private static readonly RECENCY_BUCKET_MS = 5 * 60 * 1000;
 	private static readonly CAPTION_MAX_LENGTH = 2200;
 	private static readonly LOCATION_MAX_LENGTH = 255;
 	private static readonly TAG_MAX_LENGTH = 50;
@@ -77,6 +79,7 @@ class PostService {
 			userId,
 			caption: savedPost.caption,
 			location: savedPost.location,
+			tags: normalizedTags,
 			createdAtIso: new Date(savedPost.created_at).toISOString(),
 			likeCount: savedPost.like_count ?? 0,
 			commentCount: savedPost.comment_count ?? 0,
@@ -85,6 +88,22 @@ class PostService {
 		});
 
 		await notificationService.notifyFollowersAboutNewPost(userId, savedPost.id);
+
+		try {
+			await enqueueAiModeration({
+				postId: savedPost.id,
+				userId,
+				authorId: userId,
+				caption: savedPost.caption,
+				mediaItems: sortedMedia.map((item) => ({
+					mediaUrl: item.media_url,
+					mediaType: item.media_type,
+				})),
+				enqueuedAtIso: new Date().toISOString(),
+			});
+		} catch (error) {
+			console.error('[ai-moderation] enqueue failed:', { postId: savedPost.id, error });
+		}
 
 		const result: CreatePostResultDTO = {
 			id: savedPost.id,
@@ -330,7 +349,8 @@ class PostService {
 		post: FeedPostCacheDataDTO,
 		userInterest: UserInterestDTO,
 	): FeedRankingDebugDTO {
-		const now = Date.now();
+		const now =
+			Math.floor(Date.now() / PostService.RECENCY_BUCKET_MS) * PostService.RECENCY_BUCKET_MS;
 		const ageMs = Math.max(0, now - post.createdAt.getTime());
 		const ageHours = ageMs / (1000 * 60 * 60);
 

@@ -18,6 +18,9 @@ export const env = {
 		folder: process.env.CLOUDINARY_POST_FOLDER || 'posts',
 		storyFolder: process.env.CLOUDINARY_STORY_FOLDER || 'stories',
 	},
+	gemini: {
+		apiKey: process.env.GEMINI_API_KEY,
+	},
 	redis: {
 		url: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
 		queueUrl: process.env.REDIS_URL_QUEUE || process.env.REDIS_URL || 'redis://127.0.0.1:6379',

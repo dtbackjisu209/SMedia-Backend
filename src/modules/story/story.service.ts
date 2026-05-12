@@ -6,6 +6,7 @@ import { cloudinary } from '../../core/config/cloudinary.js';
 import { In, MoreThan } from 'typeorm';
 import fs from 'fs';
 import notificationService from '../notification/notification.service.js';
+import { ContentModerationService } from '../../core/handler/moderation.service.js';
 
 class StoryService {
     private storyRepository = AppDataSource.getRepository(Story);
@@ -52,15 +53,22 @@ class StoryService {
         return Array.from(userMap.values());
     }
 
-    public async createStory(userId: number, file: Express.Multer.File) {
+    public async createStory(userId: number, file: Express.Multer.File, content?: string) {
         const user = await this.userRepository.findOneBy({ id: userId });
         if (!user) throw new Error('User not found');
 
         const mediaType: 'image' | 'video' = file.mimetype.startsWith('video') ? 'video' : 'image';
         
+        // 1. Content Moderation
+        const moderationResult = await ContentModerationService.moderateContent(content || "", "", mediaType);
+        
+        if (moderationResult.status === 'VIOLATION') {
+            throw new Error(`Content violated safety guidelines: ${moderationResult.reason}`);
+        }
+
         let mediaUrl = '';
         
-        // 1. Upload to Cloudinary
+        // 2. Upload to Cloudinary
         try {
             // Convert buffer to base64 if using memoryStorage
             const b64 = Buffer.from(file.buffer).toString('base64');
@@ -89,7 +97,10 @@ class StoryService {
 
         const savedStory = await this.storyRepository.save(story);
         await notificationService.notifyFollowersAboutNewStory(userId, savedStory.id);
-        return savedStory;
+        return {
+            ...savedStory,
+            moderation: moderationResult
+        };
     }
 
     public async deleteStory(userId: number, storyId: number) {

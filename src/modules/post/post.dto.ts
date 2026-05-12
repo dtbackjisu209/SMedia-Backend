@@ -58,6 +58,7 @@ export type CacheNewPostFeedInputDTO = {
 	postId: number;
 	caption: string | null;
 	location: string | null;
+	tags: string[];
 	createdAt: Date;
 	likeCount: number;
 	commentCount: number;
@@ -128,6 +129,7 @@ export type PostDetailDTO = {
 	id: number;
 	caption: string | null;
 	location: string | null;
+	tags: string[];
 	created_at: Date;
 	author: FeedAuthorDTO;
 	media: FeedMediaDTO[];

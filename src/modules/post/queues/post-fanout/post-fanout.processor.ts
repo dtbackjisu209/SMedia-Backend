@@ -16,6 +16,7 @@ export const processPostFanout = async (job: Job<PostFeedFanoutJobData>): Promis
 		postId: job.data.postId,
 		caption: job.data.caption,
 		location: job.data.location,
+		tags: Array.isArray(job.data.tags) ? job.data.tags : [],
 		createdAt: new Date(job.data.createdAtIso),
 		likeCount: job.data.likeCount,
 		commentCount: job.data.commentCount,

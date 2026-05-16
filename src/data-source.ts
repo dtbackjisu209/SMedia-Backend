@@ -11,8 +11,10 @@ import { ExpandNotifications1775200000000 } from './database/migrations/17752000
 import { AddNotificationHiddenFlag1775300000000 } from './database/migrations/1775300000000-add-notification-hidden-flag.js';
 
 import { AddMessageRepliesAndReactions1775400000000 } from './database/migrations/1775400000000-add-message-replies-and-reactions.js';
-
 import { AddNewPostNotificationTypes1775400000000 } from './database/migrations/1775400000000-add-new-post-notification-types.js';
+import { AddNicknameToConversationMember1775500000000 } from './database/migrations/1775500000000-add-nickname-to-conversation-member.js';
+import { AddMuteFieldsToConversationMember1775500000001 } from './database/migrations/1775500000001-add-mute-fields-to-conversation-member.js';
+import { FixMissingColumns1775600000000 } from './database/migrations/1775600000000-fix-missing-columns.js';
 
 import {
   User,
@@ -69,9 +71,10 @@ export const AppDataSource = new DataSource({
     AddNotificationHiddenFlag1775300000000,
 
     AddMessageRepliesAndReactions1775400000000,
-
     AddNewPostNotificationTypes1775400000000,
-
+    AddNicknameToConversationMember1775500000000,
+    AddMuteFieldsToConversationMember1775500000001,
+    FixMissingColumns1775600000000,
   ],
   migrationsRun: true,
 });

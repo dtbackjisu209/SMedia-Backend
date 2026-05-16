@@ -84,9 +84,9 @@ AppDataSource.initialize()
         });
 
         // 5. Quan trọng: Dùng server.listen thay vì app.listen
-        server.listen(PORT, () => {
-            console.log(`Server and Realtime Socket are running on port ${PORT}`);
-        });
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server and Realtime Socket are running on port ${PORT}`);
+    });
     })
     .catch((error) => {
         console.error("Error during Data Source initialization:", error);

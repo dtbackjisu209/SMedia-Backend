@@ -1,5 +1,4 @@
 import { ensureRedisConnected, redisClient } from '../../../core/config/redis.js';
-import { normalizePublicAssetUrl } from '../../../utils/publicAssetUrl.js';
 import type {
 	CacheNewPostFeedInputDTO,
 	FeedPostCacheDataDTO,
@@ -15,7 +14,6 @@ class PostRedisService {
 			postId,
 			caption,
 			location,
-			tags,
 			createdAt,
 			likeCount,
 			commentCount,
@@ -31,20 +29,20 @@ class PostRedisService {
 		const postIdValue = String(postId);
 
 		const pipeline = redisClient.multi();
-			pipeline.hSet(postRedisKeys.postData(postId), {
+		pipeline.hSet(postRedisKeys.postData(postId), {
 			caption: caption ?? '',
 			location: location ?? '',
 			like_count: String(likeCount),
 			comment_count: String(commentCount),
 			created_at: createdAt.toISOString(),
-			tags: JSON.stringify(tags ?? []),
+			tags: '[]',
 			thumbnail,
 			media_count: String(mediaCount),
 			author_id: String(author.id),
 			author_username: author.username,
 			author_full_name: author.fullName ?? '',
-				author_avatar_url: normalizePublicAssetUrl(author.avatarUrl) ?? '',
-			});
+			author_avatar_url: author.avatarUrl ?? '',
+		});
 
 		for (const feedUserId of feedUserIds) {
 			pipeline.zAdd(postRedisKeys.feed(feedUserId), {
@@ -123,7 +121,7 @@ class PostRedisService {
 					id: this.toNumber(row.author_id),
 					username: row.author_username ?? '',
 					fullName: row.author_full_name || null,
-					avatarUrl: normalizePublicAssetUrl(row.author_avatar_url),
+					avatarUrl: row.author_avatar_url || null,
 				},
 			});
 		}
@@ -152,7 +150,7 @@ class PostRedisService {
 				author_id: String(post.author.id),
 				author_username: post.author.username,
 				author_full_name: post.author.fullName ?? '',
-				author_avatar_url: normalizePublicAssetUrl(post.author.avatarUrl) ?? '',
+				author_avatar_url: post.author.avatarUrl ?? '',
 			});
 		}
 
@@ -212,7 +210,7 @@ class PostRedisService {
 				author_id: String(post.author.id),
 				author_username: post.author.username,
 				author_full_name: post.author.fullName ?? '',
-				author_avatar_url: normalizePublicAssetUrl(post.author.avatarUrl) ?? '',
+				author_avatar_url: post.author.avatarUrl ?? '',
 			});
 
 			pipeline.zAdd(postRedisKeys.feed(userId), {

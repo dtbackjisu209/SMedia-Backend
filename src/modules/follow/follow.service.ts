@@ -16,7 +16,6 @@ import type {
 } from './follow.dto.js';
 import { normalizePagination } from './follow.dto.js';
 import notificationService from '../notification/notification.service.js';
-import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 const CACHE_TTL_SECONDS = 120;
 const FOLLOW_FEED_WARMUP_LIMIT = 10;
@@ -28,7 +27,7 @@ const toUserSummary = (user: User): FollowUserSummary => ({
   id: user.id,
   username: user.username,
   full_name: user.full_name,
-  avatar_url: normalizePublicAssetUrl(user.avatar_url),
+  avatar_url: user.avatar_url,
   is_private: user.is_private,
 });
 

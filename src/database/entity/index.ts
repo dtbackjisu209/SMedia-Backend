@@ -14,6 +14,8 @@ export { ConversationMember } from './conversationMember.entity.js';
 export { Notification } from './notification.entity.js';
 export {Story} from './story.entity.js';
 export {StoryView} from './storyView.entity.js';
+export { StoryHighlight } from './storyHighlight.entity.js';
+export { StoryHighlightItem } from './storyHighlightItem.entity.js';
 export {UserBlock} from './userBlock.entity.js';
 export { UserInteraction } from './userInteraction.entity.js';
 

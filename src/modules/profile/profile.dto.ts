@@ -29,6 +29,23 @@ export interface ProfilePostDto {
   media: ProfilePostMediaDto[];
 }
 
+export interface ProfileHighlightStoryDto {
+  id: number;
+  media_url: string;
+  media_type: 'image' | 'video';
+  created_at: Date;
+  expires_at: Date;
+}
+
+export interface ProfileHighlightDto {
+  id: number;
+  title: string;
+  cover_media_url: string | null;
+  created_at: Date;
+  story_count: number;
+  stories: ProfileHighlightStoryDto[];
+}
+
 export interface ProfileViewDto {
   id: number;
   username: string;
@@ -42,6 +59,7 @@ export interface ProfileViewDto {
   post_count: number;
   is_following: boolean;
   has_pending_request: boolean;
+  highlights: ProfileHighlightDto[];
   posts: ProfilePostDto[];
 }
 

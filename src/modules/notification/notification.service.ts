@@ -135,15 +135,6 @@ class NotificationService {
     });
   }
 
-  async notifyPostRemovedForCommunityViolation(userId: number, postId: number): Promise<void> {
-    await this.createNotification({
-      userId,
-      type: 'message',
-      referenceId: postId,
-      content: 'Bài viết của bạn vi phạm tiêu chuẩn cộng đồng và đã bị xóa.',
-    });
-  }
-
   private async notifyFollowers(
     authorId: number,
     input: {

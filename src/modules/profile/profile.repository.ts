@@ -4,8 +4,6 @@ import { Follow } from '../../database/entity/follow.entity.js';
 import { FollowRequest } from '../../database/entity/followRequest.entity.js';
 import { Post } from '../../database/entity/post.entity.js';
 import { PostMedia } from '../../database/entity/postMedia.entity.js';
-import { StoryHighlight } from '../../database/entity/storyHighlight.entity.js';
-import { StoryHighlightItem } from '../../database/entity/storyHighlightItem.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 
 class ProfileRepository {
@@ -14,8 +12,6 @@ class ProfileRepository {
   private followRequestRepo = AppDataSource.getRepository(FollowRequest);
   private postRepo = AppDataSource.getRepository(Post);
   private postMediaRepo = AppDataSource.getRepository(PostMedia);
-  private storyHighlightRepo = AppDataSource.getRepository(StoryHighlight);
-  private storyHighlightItemRepo = AppDataSource.getRepository(StoryHighlightItem);
 
   findUserById(userId: number): Promise<User | null> {
     return this.userRepo.findOne({ where: { id: userId } });
@@ -90,30 +86,6 @@ class ProfileRepository {
       relations: ['post'],
       order: {
         position: 'ASC',
-      },
-    });
-  }
-
-  async findHighlightsByUserId(userId: number): Promise<StoryHighlight[]> {
-    return this.storyHighlightRepo
-      .createQueryBuilder('highlight')
-      .innerJoin(StoryHighlightItem, 'item', 'item.highlight_id = highlight.id')
-      .where('highlight.user_id = :userId', { userId })
-      .orderBy('highlight.created_at', 'ASC')
-      .distinct(true)
-      .getMany();
-  }
-
-  async findHighlightItemsByHighlightIds(highlightIds: number[]): Promise<StoryHighlightItem[]> {
-    if (highlightIds.length === 0) return [];
-
-    return this.storyHighlightItemRepo.find({
-      where: {
-        highlight_id: In(highlightIds),
-      },
-      relations: ['story', 'highlight'],
-      order: {
-        added_at: 'ASC',
       },
     });
   }

@@ -28,13 +28,7 @@ class PostController {
 			throw new BadRequestError('postId must be a positive number');
 		}
 
-		const rawCommentLimit = Number(req.query.commentLimit);
-		const commentLimit =
-			Number.isFinite(rawCommentLimit) && rawCommentLimit > 0
-				? Math.min(rawCommentLimit, 50)
-				: 20;
-
-		const post = await postService.getPostDetail(postId, commentLimit);
+		const post = await postService.getPostDetail(postId);
 
 		new OK({
 			message: 'Post detail fetched successfully',

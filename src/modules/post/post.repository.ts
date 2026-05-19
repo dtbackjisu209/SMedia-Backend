@@ -15,6 +15,7 @@ import { PostHashtag } from '../../database/entity/postHashtag.entity.js';
 import { PostLike } from '../../database/entity/postLike.entity.js';
 import { PostMedia } from '../../database/entity/postMedia.entity.js';
 import { User } from '../../database/entity/user.entity.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class PostRepository {
 	public async getPostOwnerId(postId: number): Promise<number | null> {
@@ -116,7 +117,7 @@ class PostRepository {
 			id: Number(row.id),
 			username: row.username,
 			fullName: row.full_name,
-			avatarUrl: row.avatar_url,
+			avatarUrl: normalizePublicAssetUrl(row.avatar_url),
 		};
 	}
 
@@ -152,29 +153,33 @@ class PostRepository {
 			throw new NotFoundError(`Post not found with id ${postId}`);
 		}
 
-		const mediaRows = await AppDataSource.getRepository(PostMedia)
-			.createQueryBuilder('media')
-			.select('media.media_url', 'media_url')
-			.addSelect('media.media_type', 'media_type')
-			.addSelect('media.position', 'position')
-			.where('media.post_id = :postId', { postId })
-			.orderBy('media.position', 'ASC')
-			.getRawMany<{
-				media_url: string;
-				media_type: 'image' | 'video';
-				position: number;
-			}>();
+		const [mediaRows, tags] = await Promise.all([
+			AppDataSource.getRepository(PostMedia)
+				.createQueryBuilder('media')
+				.select('media.media_url', 'media_url')
+				.addSelect('media.media_type', 'media_type')
+				.addSelect('media.position', 'position')
+				.where('media.post_id = :postId', { postId })
+				.orderBy('media.position', 'ASC')
+				.getRawMany<{
+					media_url: string;
+					media_type: 'image' | 'video';
+					position: number;
+				}>(),
+			this.getTagsByPostId(postId),
+		]);
 
 		return {
 			id: Number(postRow.post_id),
 			caption: postRow.post_caption,
 			location: postRow.post_location,
+			tags,
 			created_at: new Date(postRow.post_created_at),
 			author: {
 				id: Number(postRow.author_id),
 				username: postRow.author_username,
 				fullName: postRow.author_full_name,
-				avatarUrl: postRow.author_avatar_url,
+				avatarUrl: normalizePublicAssetUrl(postRow.author_avatar_url),
 			},
 			media: mediaRows.map((row) => ({
 				mediaUrl: row.media_url,
@@ -316,7 +321,7 @@ class PostRepository {
 					id: Number(row.author_id),
 					username: row.author_username,
 					fullName: row.author_full_name,
-					avatarUrl: row.author_avatar_url,
+					avatarUrl: normalizePublicAssetUrl(row.author_avatar_url),
 				},
 			};
 		});

@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryColumn, ManyToOne, JoinColumn, Column } from 'typeorm';
 import { Conversation } from './conversation.entity.js';
 import { User } from './user.entity.js';
 
@@ -9,6 +9,15 @@ export class ConversationMember {
 
   @PrimaryColumn({ type: 'bigint' })
   user_id!: number;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  nickname!: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  muted_until!: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  muted_forever!: boolean;
 
   @ManyToOne(() => Conversation)
   @JoinColumn({ name: 'conversation_id' })

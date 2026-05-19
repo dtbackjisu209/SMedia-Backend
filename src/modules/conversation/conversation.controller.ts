@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import chatService from './conversation.service.js';
+import { ConversationMemberService } from '../conversationMember/conversationMember.service.js';
+
+const memberService = new ConversationMemberService();
 
 class ConversationController {
   async getUserConversations(req: Request, res: Response) {
@@ -47,9 +50,15 @@ class ConversationController {
       const limit = Number(req.query.limit) || 50;
       const page = Number(req.query.page) || 1;
       const offset = (page - 1) * limit;
+      const viewerUserId = Number(req.query.viewerUserId ?? 0);
 
       const conversationId = Array.isArray(id) ? id[0] : id;
-      const messages = await chatService.getConversationMessages(conversationId, limit, offset);
+      const messages = await chatService.getConversationMessages(
+        conversationId,
+        limit,
+        offset,
+        Number.isFinite(viewerUserId) && viewerUserId > 0 ? viewerUserId : undefined,
+      );
       return res.status(200).json({ success: true, data: messages });
     } catch (error) {
       console.error('[ConversationController] getMessages:', error);
@@ -96,6 +105,67 @@ class ConversationController {
     } catch (error) {
       console.error('[ConversationController] getGroupCandidates:', error);
       return res.status(500).json({ success: false, message: 'Error while fetching group candidates' });
+    }
+  }
+
+  async getConversationMembers(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const members = await chatService.getConversationMembers(conversationId);
+      return res.status(200).json({ success: true, data: members });
+    } catch (error) {
+      console.error('[ConversationController] getConversationMembers:', error);
+      return res.status(500).json({ success: false, message: 'Error while fetching members' });
+    }
+  }
+
+  async inviteMember(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = Number(req.body.userId);
+      const requesterId = Number(req.body.requesterId);
+      const members = await memberService.addMember(conversationId, userId, requesterId);
+      return res.status(201).json({ success: true, data: members });
+    } catch (error: any) {
+      console.error('[ConversationController] inviteMember:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while inviting member' });
+    }
+  }
+
+  async removeMember(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = Number(req.params.userId);
+      const requesterId = Number(req.query.requesterId ?? 0);
+      const members = await memberService.removeMember(conversationId, userId, requesterId);
+      return res.status(200).json({ success: true, data: members });
+    } catch (error: any) {
+      console.error('[ConversationController] removeMember:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while removing member' });
+    }
+  }
+
+  async updateConversationSettings(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const requesterId = Number(req.body.requesterId);
+      const nickname =
+        req.body.nickname === undefined ? undefined : req.body.nickname === null ? null : String(req.body.nickname);
+      const muteMode =
+        req.body.muteMode === undefined ? undefined : String(req.body.muteMode) as '1h' | '8h' | '24h' | 'forever' | 'unmute';
+
+      const settings = await memberService.updateOwnSettings(conversationId, requesterId, {
+        nickname,
+        muteMode,
+      });
+
+      return res.status(200).json({ success: true, data: settings });
+    } catch (error: any) {
+      console.error('[ConversationController] updateConversationSettings:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while updating conversation settings' });
     }
   }
 }

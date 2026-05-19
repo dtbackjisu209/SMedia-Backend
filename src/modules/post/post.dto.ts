@@ -58,6 +58,7 @@ export type CacheNewPostFeedInputDTO = {
 	postId: number;
 	caption: string | null;
 	location: string | null;
+	tags: string[];
 	createdAt: Date;
 	likeCount: number;
 	commentCount: number;
@@ -128,11 +129,17 @@ export type PostDetailDTO = {
 	id: number;
 	caption: string | null;
 	location: string | null;
+	tags: string[];
 	created_at: Date;
 	author: FeedAuthorDTO;
 	media: FeedMediaDTO[];
 	like_count: number;
 	comment_count: number;
+};
+
+export type PostDetailWithCommentsDTO = PostDetailDTO & {
+	comments: import('../comment/comment.dto.js').CommentItemDTO[];
+	comments_next_cursor: number | null;
 };
 
 export type DeletePostCleanupStatusDTO = 'queued' | 'queue_failed';

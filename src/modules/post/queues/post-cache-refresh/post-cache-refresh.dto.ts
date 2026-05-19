@@ -1,4 +1,4 @@
-export type PostCacheRefreshTrigger = 'like' | 'unlike' | 'comment';
+export type PostCacheRefreshTrigger = 'like' | 'unlike' | 'comment' | 'update';
 
 export type PostCacheRefreshJobData = {
 	postId: number;

@@ -15,6 +15,7 @@ router.post(
 router.post('/highlights', authMiddleware, asyncHandler(storyController.createHighlight));
 router.get('/highlights/me', authMiddleware, asyncHandler(storyController.getMyHighlights));
 router.get('/me', authMiddleware, asyncHandler(storyController.getMyStories));
+router.get('/users/:userId', authMiddleware, asyncHandler(storyController.getStoriesByUserId));
 router.patch('/highlights/:highlightId', authMiddleware, asyncHandler(storyController.updateHighlight));
 router.post(
 	'/highlights/:highlightId/stories',

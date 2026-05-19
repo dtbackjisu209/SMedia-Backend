@@ -13,6 +13,7 @@ import {
     NotFoundError,
 } from '../../core/handler/error.response.js';
 import notificationService from '../notification/notification.service.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class StoryService {
     private storyRepository = AppDataSource.getRepository(Story);
@@ -46,7 +47,7 @@ class StoryService {
                 userMap.set(uId, {
                     userId: String(uId),
                     username: s.user.username,
-                    avatar_url: s.user.avatar_url,
+                    avatar_url: normalizePublicAssetUrl(s.user.avatar_url),
                     stories: []
                 });
             }
@@ -104,6 +105,26 @@ class StoryService {
     public async getStoriesByUserId(userId: number) {
         const stories = await this.storyRepository.find({
             where: { user: { id: userId } },
+            relations: ['user'],
+            order: { created_at: 'DESC' },
+        });
+
+        return stories.map((story) => ({
+            id: story.id,
+            media_url: story.media_url,
+            media_type: story.media_type,
+            created_at: story.created_at,
+            expires_at: story.expires_at,
+        }));
+    }
+
+    public async getActiveStoriesByUserId(userId: number) {
+        const now = new Date();
+        const stories = await this.storyRepository.find({
+            where: {
+                user: { id: userId },
+                expires_at: MoreThan(now),
+            },
             relations: ['user'],
             order: { created_at: 'DESC' },
         });

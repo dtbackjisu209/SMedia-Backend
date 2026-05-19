@@ -37,17 +37,6 @@ class ProfileService {
       throw new NotFoundError('User not found');
     }
 
-    const posts = await profileRepository.findPostsByUserId(targetUserId);
-    const media = await profileRepository.findMediaByPostIds(posts.map((post) => post.id));
-    const mediaByPostId = new Map<number, typeof media>();
-
-    for (const item of media) {
-      const postId = item.post.id;
-      const existing = mediaByPostId.get(postId) ?? [];
-      existing.push(item);
-      mediaByPostId.set(postId, existing);
-    }
-
     const [followerCount, followingCount, postCount] = await Promise.all([
       profileRepository.countFollowers(targetUserId),
       profileRepository.countFollowing(targetUserId),
@@ -66,6 +55,36 @@ class ProfileService {
       hasPendingRequest = Boolean(pendingRequest);
     }
 
+    const canViewPrivateContent =
+      !user.is_private || Number(viewerUserId) === Number(targetUserId) || isFollowing;
+
+    const posts = canViewPrivateContent ? await profileRepository.findPostsByUserId(targetUserId) : [];
+    const media = canViewPrivateContent
+      ? await profileRepository.findMediaByPostIds(posts.map((post) => post.id))
+      : [];
+    const highlights = canViewPrivateContent
+      ? await profileRepository.findHighlightsByUserId(targetUserId)
+      : [];
+    const highlightItems = canViewPrivateContent
+      ? await profileRepository.findHighlightItemsByHighlightIds(highlights.map((highlight) => highlight.id))
+      : [];
+    const mediaByPostId = new Map<number, typeof media>();
+    const storiesByHighlightId = new Map<number, typeof highlightItems>();
+
+    for (const item of media) {
+      const postId = item.post.id;
+      const existing = mediaByPostId.get(postId) ?? [];
+      existing.push(item);
+      mediaByPostId.set(postId, existing);
+    }
+
+    for (const item of highlightItems) {
+      const highlightId = item.highlight.id;
+      const existing = storiesByHighlightId.get(highlightId) ?? [];
+      existing.push(item);
+      storiesByHighlightId.set(highlightId, existing);
+    }
+
     return {
       id: user.id,
       username: user.username,
@@ -79,6 +98,23 @@ class ProfileService {
       post_count: postCount,
       is_following: isFollowing,
       has_pending_request: hasPendingRequest,
+      highlights: highlights.map((highlight) => {
+        const stories = storiesByHighlightId.get(highlight.id) ?? [];
+        return {
+          id: highlight.id,
+          title: highlight.title,
+          cover_media_url: highlight.cover_media_url ?? stories[0]?.story.media_url ?? null,
+          created_at: highlight.created_at,
+          story_count: stories.length,
+          stories: stories.map((item) => ({
+            id: item.story.id,
+            media_url: item.story.media_url,
+            media_type: item.story.media_type,
+            created_at: item.story.created_at,
+            expires_at: item.story.expires_at,
+          })),
+        };
+      }),
       posts: posts.map((post) => {
         const postMedia = mediaByPostId.get(post.id) ?? [];
         return {

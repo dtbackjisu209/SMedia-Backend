@@ -12,6 +12,25 @@ router.post(
 	upload.single('file'),
 	asyncHandler(storyController.createStory),
 );
+router.post('/highlights', authMiddleware, asyncHandler(storyController.createHighlight));
+router.get('/highlights/me', authMiddleware, asyncHandler(storyController.getMyHighlights));
+router.get('/me', authMiddleware, asyncHandler(storyController.getMyStories));
+router.patch('/highlights/:highlightId', authMiddleware, asyncHandler(storyController.updateHighlight));
+router.post(
+	'/highlights/:highlightId/stories',
+	authMiddleware,
+	asyncHandler(storyController.addStoryToHighlight),
+);
+router.delete(
+	'/highlights/:highlightId/stories/:storyId',
+	authMiddleware,
+	asyncHandler(storyController.removeStoryFromHighlight),
+);
+router.delete(
+	'/highlights/:highlightId',
+	authMiddleware,
+	asyncHandler(storyController.deleteHighlight),
+);
 
 router.delete('/:id', authMiddleware, asyncHandler(storyController.deleteStory));
 

@@ -68,6 +68,7 @@ export interface ProfileUpdateDto {
   full_name?: string | null;
   bio?: string | null;
   avatar_url?: string | null;
+  avatarUrl?: string | null;
   is_private?: boolean;
 }
 

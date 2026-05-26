@@ -8,6 +8,7 @@ import { emitNewCommentToPost } from '../notification/notification.socket.js';
 import notificationService from '../notification/notification.service.js';
 import postRepository from '../post/post.repository.js';
 import commentRepository from './comment.repository.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 import type {
 	CreateCommentResultDTO,
 	CreateCommentServiceInputDTO,
@@ -55,7 +56,7 @@ class CommentService {
 					user_id: result.user_id,
 					username: actor?.username ?? '',
 					full_name: actor?.full_name ?? '',
-					avatar_url: actor?.avatar_url ?? null,
+					avatar_url: normalizePublicAssetUrl(actor?.avatar_url),
 					content: result.content,
 					parent_id: result.parent_id,
 					created_at: result.created_at,

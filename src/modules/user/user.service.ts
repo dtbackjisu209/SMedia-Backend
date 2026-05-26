@@ -4,6 +4,7 @@ import type { SearchUsersQueryDto, UserProfileDto, UserSearchResultDto } from '.
 import { AppDataSource } from '../../data-source.js';
 import { Follow } from '../../database/entity/follow.entity.js';
 import { FollowRequest } from '../../database/entity/followRequest.entity.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class UserService {
   private followRepo = AppDataSource.getRepository(Follow);
@@ -27,7 +28,7 @@ class UserService {
       id: user.id,
       username: user.username,
       full_name: user.full_name,
-      avatar_url: user.avatar_url,
+      avatar_url: normalizePublicAssetUrl(user.avatar_url),
       is_private: user.is_private,
     }));
   }
@@ -75,7 +76,7 @@ class UserService {
       id: user.id,
       username: user.username,
       full_name: user.full_name,
-      avatar_url: user.avatar_url,
+      avatar_url: normalizePublicAssetUrl(user.avatar_url),
       is_private: user.is_private,
       created_at: user.created_at,
       follower_count: followerCount,

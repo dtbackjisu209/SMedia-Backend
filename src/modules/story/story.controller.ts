@@ -88,6 +88,24 @@ class StoryController {
 		}).send(res);
 	}
 
+	public async getStoriesByUserId(req: Request, res: Response, _next: NextFunction): Promise<void> {
+		if (!req.userId) {
+			throw new AuthFailError();
+		}
+
+		const targetUserId = Number(req.params.userId);
+		if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+			throw new BadRequestError('Invalid user id');
+		}
+
+		const stories = await storyService.getActiveStoriesByUserId(targetUserId);
+
+		new OK({
+			message: 'Fetch user stories successfully',
+			data: stories,
+		}).send(res);
+	}
+
 	public async updateHighlight(req: Request, res: Response, _next: NextFunction): Promise<void> {
 		if (!req.userId) {
 			throw new AuthFailError();

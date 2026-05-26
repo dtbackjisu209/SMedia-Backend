@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import { BadRequestError, NotFoundError } from '../../core/handler/error.response.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 import type {
   ProfilePasswordChangeDto,
   ProfileSearchQueryDto,
@@ -22,7 +23,7 @@ class ProfileService {
       id: user.id,
       username: user.username,
       full_name: user.full_name,
-      avatar_url: user.avatar_url,
+      avatar_url: normalizePublicAssetUrl(user.avatar_url),
       is_private: user.is_private,
     }));
   }
@@ -90,7 +91,7 @@ class ProfileService {
       username: user.username,
       full_name: user.full_name,
       bio: user.bio,
-      avatar_url: user.avatar_url,
+      avatar_url: normalizePublicAssetUrl(user.avatar_url),
       is_private: user.is_private,
       created_at: user.created_at,
       follower_count: followerCount,
@@ -176,8 +177,21 @@ class ProfileService {
       user.bio = payload.bio ? payload.bio.trim() : null;
     }
 
-    if (payload.avatar_url !== undefined) {
-      user.avatar_url = payload.avatar_url ? payload.avatar_url.trim() : null;
+    const rawAvatarUrl = payload.avatar_url ?? payload.avatarUrl;
+    const hasAvatarField = payload.avatar_url !== undefined || payload.avatarUrl !== undefined;
+    if (hasAvatarField) {
+      if (rawAvatarUrl !== null && typeof rawAvatarUrl !== 'string') {
+        throw new BadRequestError('avatar_url must be a string or null');
+      }
+
+      const trimmedAvatarUrl = rawAvatarUrl?.trim() ?? '';
+      const normalizedAvatarUrl = normalizePublicAssetUrl(trimmedAvatarUrl);
+
+      if (trimmedAvatarUrl && !normalizedAvatarUrl) {
+        throw new BadRequestError('avatar_url must be a valid public http/https URL');
+      }
+
+      user.avatar_url = normalizedAvatarUrl;
     }
 
     if (typeof payload.is_private === 'boolean') {

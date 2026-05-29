@@ -1,4 +1,5 @@
 import { ensureRedisConnected, redisClient } from '../../../core/config/redis.js';
+import { normalizePublicAssetUrl } from '../../../utils/publicAssetUrl.js';
 import type {
 	CacheNewPostFeedInputDTO,
 	FeedPostCacheDataDTO,
@@ -30,7 +31,7 @@ class PostRedisService {
 		const postIdValue = String(postId);
 
 		const pipeline = redisClient.multi();
-		pipeline.hSet(postRedisKeys.postData(postId), {
+			pipeline.hSet(postRedisKeys.postData(postId), {
 			caption: caption ?? '',
 			location: location ?? '',
 			like_count: String(likeCount),
@@ -42,8 +43,8 @@ class PostRedisService {
 			author_id: String(author.id),
 			author_username: author.username,
 			author_full_name: author.fullName ?? '',
-			author_avatar_url: author.avatarUrl ?? '',
-		});
+				author_avatar_url: normalizePublicAssetUrl(author.avatarUrl) ?? '',
+			});
 
 		for (const feedUserId of feedUserIds) {
 			pipeline.zAdd(postRedisKeys.feed(feedUserId), {
@@ -122,7 +123,7 @@ class PostRedisService {
 					id: this.toNumber(row.author_id),
 					username: row.author_username ?? '',
 					fullName: row.author_full_name || null,
-					avatarUrl: row.author_avatar_url || null,
+					avatarUrl: normalizePublicAssetUrl(row.author_avatar_url),
 				},
 			});
 		}
@@ -151,7 +152,7 @@ class PostRedisService {
 				author_id: String(post.author.id),
 				author_username: post.author.username,
 				author_full_name: post.author.fullName ?? '',
-				author_avatar_url: post.author.avatarUrl ?? '',
+				author_avatar_url: normalizePublicAssetUrl(post.author.avatarUrl) ?? '',
 			});
 		}
 
@@ -211,7 +212,7 @@ class PostRedisService {
 				author_id: String(post.author.id),
 				author_username: post.author.username,
 				author_full_name: post.author.fullName ?? '',
-				author_avatar_url: post.author.avatarUrl ?? '',
+				author_avatar_url: normalizePublicAssetUrl(post.author.avatarUrl) ?? '',
 			});
 
 			pipeline.zAdd(postRedisKeys.feed(userId), {

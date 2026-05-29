@@ -15,6 +15,7 @@ import { AddNewPostNotificationTypes1775400000000 } from './database/migrations/
 import { AddNicknameToConversationMember1775500000000 } from './database/migrations/1775500000000-add-nickname-to-conversation-member.js';
 import { AddMuteFieldsToConversationMember1775500000001 } from './database/migrations/1775500000001-add-mute-fields-to-conversation-member.js';
 import { FixMissingColumns1775600000000 } from './database/migrations/1775600000000-fix-missing-columns.js';
+import { AddStoryHighlights1775700000000 } from './database/migrations/1775700000000-add-story-highlights.js';
 
 import {
   User,
@@ -32,6 +33,8 @@ import {
   ConversationMember,
   Notification,
   Story,
+  StoryHighlight,
+  StoryHighlightItem,
   StoryView,
   UserInteraction,
   UserBlock,
@@ -56,6 +59,8 @@ export const AppDataSource = new DataSource({
     ConversationMember,
     Notification,
     Story,
+    StoryHighlight,
+    StoryHighlightItem,
     StoryView,
     UserInteraction,
     UserBlock,
@@ -75,6 +80,7 @@ export const AppDataSource = new DataSource({
     AddNicknameToConversationMember1775500000000,
     AddMuteFieldsToConversationMember1775500000001,
     FixMissingColumns1775600000000,
+    AddStoryHighlights1775700000000,
   ],
   migrationsRun: true,
 });

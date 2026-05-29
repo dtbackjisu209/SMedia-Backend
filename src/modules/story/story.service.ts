@@ -59,21 +59,28 @@ class StoryService {
 
         const mediaType: 'image' | 'video' = file.mimetype.startsWith('video') ? 'video' : 'image';
         
-        // 1. Content Moderation
-        const moderationResult = await ContentModerationService.moderateContent(content || "", "", mediaType);
+        // 1. Convert buffer to base64 for AI analysis
+        const b64 = Buffer.from(file.buffer).toString('base64');
+        const dataURI = "data:" + file.mimetype + ";base64," + b64;
+
+        // 2. Content Moderation (Text + Media)
+        let moderationResult;
+        try {
+            moderationResult = await ContentModerationService.moderateContent(content || "", dataURI, mediaType);
+        } catch (error) {
+            console.error('Moderation service internal error:', error);
+            moderationResult = { status: 'WARNING', reason: 'Hệ thống kiểm duyệt tạm thời không ổn định', category: 'normal' };
+        }
         
+        // Chỉ chặn nếu status là VIOLATION
         if (moderationResult.status === 'VIOLATION') {
-            throw new Error(`Content violated safety guidelines: ${moderationResult.reason}`);
+            throw new Error(`Nội dung vi phạm chính sách cộng đồng: ${moderationResult.reason}`);
         }
 
         let mediaUrl = '';
         
-        // 2. Upload to Cloudinary
+        // 3. Upload to Cloudinary
         try {
-            // Convert buffer to base64 if using memoryStorage
-            const b64 = Buffer.from(file.buffer).toString('base64');
-            const dataURI = "data:" + file.mimetype + ";base64," + b64;
-            
             const uploadRes = await cloudinary.uploader.upload(dataURI, {
                 resource_type: 'auto',
                 folder: 'stories'

@@ -32,4 +32,20 @@ export class AuthController {
     logout = (req: Request, res: Response, next: NextFunction) => {
         res.status(200).json({ message: 'Logged out successfully' });
     };
+
+    async resetPasswordDirect(req: Request, res: Response, next: NextFunction) {
+        try {
+            const { email, newPassword } = req.body;
+            
+            if (!email || !newPassword) {
+                return res.status(400).json({ message: 'Please enter both your email and new password.' });
+            }
+
+            await this.authService.resetPasswordDirect(email, newPassword);
+            
+            return res.status(200).json({ message: 'Password reset successfully!' });
+        } catch (error: any) {
+            return res.status(400).json({ message: error.message || 'Something went wrong' });
+        }
+    }
 }

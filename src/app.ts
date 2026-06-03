@@ -17,7 +17,6 @@ import userRouter from './modules/user/user.route.js';
 import storyRouter from './modules/story/story.route.js';
 
 
-
 const app = express();
 
 app.use(cors());

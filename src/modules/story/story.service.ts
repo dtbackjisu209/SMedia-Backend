@@ -13,6 +13,7 @@ import {
     NotFoundError,
 } from '../../core/handler/error.response.js';
 import notificationService from '../notification/notification.service.js';
+import { ContentModerationService } from '../../core/handler/moderation.service.js';
 import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class StoryService {
@@ -54,6 +55,7 @@ class StoryService {
             userMap.get(uId).stories.push({
                 id: String(s.id),
                 media_url: s.media_url,
+                caption: s.caption,
                 created_at: s.created_at,
                 type: s.media_type
             });
@@ -62,20 +64,61 @@ class StoryService {
         return Array.from(userMap.values());
     }
 
-    public async createStory(userId: number, file: Express.Multer.File) {
+    public async createStory(userId: number, file: Express.Multer.File, content?: string) {
         const user = await this.userRepository.findOneBy({ id: userId });
         if (!user) throw new Error('User not found');
 
         const mediaType: 'image' | 'video' = file.mimetype.startsWith('video') ? 'video' : 'image';
         
+        // 1. Convert buffer to base64 for AI analysis
+        const b64 = Buffer.from(file.buffer).toString('base64');
+        const dataURI = "data:" + file.mimetype + ";base64," + b64;
+
+        // 2. Content Moderation (Text + Media)
+        console.log("--- BẮT ĐẦU KIỂM DUYỆT STORY ---");
+        let moderationResult;
+        try {
+            moderationResult = await ContentModerationService.moderateContent(content || "", dataURI, mediaType);
+            console.log('KẾT QUẢ KIỂM DUYỆT TRONG STORY SERVICE:', JSON.stringify(moderationResult, null, 2));
+        } catch (error: any) {
+            console.error('LỖI DỊCH VỤ KIỂM DUYỆT AI:', error);
+            
+            let errorMessage = `Lỗi hệ thống kiểm duyệt AI: ${error.message || 'Không xác định'}.`;
+            
+            if (error.status === 404) {
+                errorMessage = 'Dịch vụ kiểm duyệt AI đang được bảo trì (Lỗi 404 - Model không tìm thấy).';
+            } else if (error.message?.includes('Quota exceeded') || error.status === 429 || error.message?.includes('limit: 0')) {
+                console.warn('AI Quota exceeded or limit 0, bypassing moderation completely...');
+                moderationResult = { status: 'SAFE', reason: 'Bỏ qua kiểm duyệt do hệ thống AI tạm nghỉ', category: 'normal' };
+            } else {
+                throw new Error(errorMessage);
+            }
+        }
+        
+        // KIỂM TRA CHẶN CHẶT CHẼ
+        if (!moderationResult) {
+            moderationResult = { status: 'SAFE', reason: 'Mặc định an toàn', category: 'normal' };
+        }
+        
+        // KIỂM TRA CHẶN CHẶT CHẼ
+        const isViolation = moderationResult.status === 'VIOLATION';
+        const isRestrictedWarning = moderationResult.status === 'WARNING' && 
+            ['violence', 'sexual', 'horror'].includes(moderationResult.category);
+
+        if (isViolation || isRestrictedWarning) {
+            const categoryLabel = moderationResult.category === 'horror' ? 'KINH DỊ' : 
+                                 moderationResult.category === 'violence' ? 'BẠO LỰC' : 
+                                 moderationResult.category === 'sexual' ? 'NHẠY CẢM' : 'VI PHẠM';
+            
+            console.log(`>>> CHẶN THÀNH CÔNG: [${categoryLabel}] - Lý do: ${moderationResult.reason}`);
+            throw new Error(`Nội dung vi phạm chính sách cộng đồng (Yếu tố ${categoryLabel.toLowerCase()}): ${moderationResult.reason}`);
+        }
+
+        console.log(">>> KIỂM DUYỆT THÔNG QUA, BẮT ĐẦU UPLOAD...");
         let mediaUrl = '';
         
-        // 1. Upload to Cloudinary
+        // 3. Upload to Cloudinary
         try {
-            // Convert buffer to base64 if using memoryStorage
-            const b64 = Buffer.from(file.buffer).toString('base64');
-            const dataURI = "data:" + file.mimetype + ";base64," + b64;
-            
             const uploadRes = await cloudinary.uploader.upload(dataURI, {
                 resource_type: 'auto',
                 folder: 'stories'
@@ -93,13 +136,17 @@ class StoryService {
             user,
             media_url: mediaUrl,
             media_type: mediaType,
+            caption: content,
             expires_at: expiresAt,
             created_at: new Date()
         });
 
         const savedStory = await this.storyRepository.save(story);
         await notificationService.notifyFollowersAboutNewStory(userId, savedStory.id);
-        return savedStory;
+        return {
+            ...savedStory,
+            moderation: moderationResult
+        };
     }
 
     public async getStoriesByUserId(userId: number) {
@@ -113,6 +160,7 @@ class StoryService {
             id: story.id,
             media_url: story.media_url,
             media_type: story.media_type,
+            caption: story.caption,
             created_at: story.created_at,
             expires_at: story.expires_at,
         }));
@@ -133,6 +181,7 @@ class StoryService {
             id: story.id,
             media_url: story.media_url,
             media_type: story.media_type,
+            caption: story.caption,
             created_at: story.created_at,
             expires_at: story.expires_at,
         }));

@@ -16,6 +16,7 @@ import { AddNicknameToConversationMember1775500000000 } from './database/migrati
 import { AddMuteFieldsToConversationMember1775500000001 } from './database/migrations/1775500000001-add-mute-fields-to-conversation-member.js';
 import { FixMissingColumns1775600000000 } from './database/migrations/1775600000000-fix-missing-columns.js';
 import { AddStoryHighlights1775700000000 } from './database/migrations/1775700000000-add-story-highlights.js';
+import { AddCaptionToStory1775800000000 } from './database/migrations/1775800000000-add-caption-to-story.js';
 
 import {
   User,
@@ -81,6 +82,7 @@ export const AppDataSource = new DataSource({
     AddMuteFieldsToConversationMember1775500000001,
     FixMissingColumns1775600000000,
     AddStoryHighlights1775700000000,
+    AddCaptionToStory1775800000000,
   ],
   migrationsRun: true,
 });

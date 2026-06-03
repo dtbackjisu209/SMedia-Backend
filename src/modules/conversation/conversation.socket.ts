@@ -123,6 +123,7 @@ export const chatSocket = (io: Server, socket: Socket) => {
 
           return notificationService.createNotification({
             userId: recipientId,
+            actorId: senderId,
             type: 'message',
             referenceId: Number(data.conversationId),
             content: `${savedMsg.sender_name} đã nhắn tin cho bạn, nhấn vào để xem chi tiết.`,

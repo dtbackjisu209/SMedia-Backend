@@ -15,6 +15,7 @@ class NotificationRepository {
     const repo = this.resolveRepo(manager);
     const entity = repo.create({
       user: { id: input.userId } as User,
+      actor: input.actorId ? ({ id: input.actorId } as User) : null,
       type: input.type,
       content: input.content,
       reference_id: input.referenceId ?? null,
@@ -26,11 +27,14 @@ class NotificationRepository {
   }
 
   async listByUserId(userId: number, limit: number): Promise<Notification[]> {
-    return this.repo.find({
-      where: { user: { id: userId }, is_hidden: false },
-      order: { created_at: 'DESC' },
-      take: limit,
-    });
+    return this.repo
+      .createQueryBuilder('notification')
+      .leftJoinAndSelect('notification.actor', 'actor')
+      .where('notification.user_id = :userId', { userId })
+      .andWhere('notification.is_hidden = :isHidden', { isHidden: false })
+      .orderBy('notification.created_at', 'DESC')
+      .take(limit)
+      .getMany();
   }
 
   async findByIdForUser(notificationId: number, userId: number): Promise<Notification | null> {

@@ -41,4 +41,18 @@ export class AuthService {
 
         return { token, userId: user.id };
     }
+
+    // Trong file auth.service.ts
+
+async resetPasswordDirect(email: string, newPassword: string): Promise<void> {
+    const user = await this.authRepo.findByEmail(email);
+    if (!user) {
+        throw new Error('Email không tồn tại trong hệ thống');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await this.authRepo.update(user.id, { password_hash: hashedPassword });
+}
 }

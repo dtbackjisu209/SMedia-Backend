@@ -171,6 +171,7 @@ class FollowService {
         createdNotification = await notificationService.createNotification(
           {
             userId: targetUser.id,
+            actorId: currentUser.id,
             type: 'follow',
             referenceId: currentUser.id,
             content: `${currentUser.full_name || currentUser.username} started following you.`,
@@ -220,6 +221,7 @@ class FollowService {
       createdNotification = await notificationService.createNotification(
         {
           userId: targetUser.id,
+          actorId: currentUser.id,
           type: 'follow_request',
           referenceId: currentUser.id,
           content: `${currentUser.full_name || currentUser.username} requested to follow you.`,
@@ -362,6 +364,7 @@ class FollowService {
       createdNotification = await notificationService.createNotification(
         {
           userId: requesterId,
+          actorId: currentUser.id,
           type: 'follow_accept',
           referenceId: currentUserId,
           content: `${currentUser.full_name || currentUser.username} accepted your follow request.`,

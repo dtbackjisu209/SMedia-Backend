@@ -25,6 +25,10 @@ export class Notification {
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'actor_id' })
+  actor!: User | null;
+
   @Column({
     type: 'enum',
     enum: notificationTypes,

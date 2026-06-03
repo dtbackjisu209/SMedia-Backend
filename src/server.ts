@@ -21,6 +21,7 @@ import storyRouter from './modules/story/story.route.js';
 import { startUserInteractionWorker } from './modules/post/queues/user-interaction/user-interaction.worker.js';
 import { startUnfollowFeedCleanupWorker } from './modules/follow/queues/unfollow-feed-cleanup/unfollow-feed-cleanup.worker.js';
 import { startAiModerationWorker } from './modules/post/queues/ai-moderation/ai-moderation.worker.js';
+import { startStoryModerationWorker } from './modules/story/queues/story-moderation/story-moderation.worker.js';
 const PORT = 3000;
 app.use(express.json());
 app.use('/api/auth', authRoutes);
@@ -55,6 +56,8 @@ AppDataSource.initialize()
                 console.log('Unfollow feed cleanup worker started');
                 startAiModerationWorker();
                 console.log('AI moderation worker started');
+                startStoryModerationWorker();
+                console.log('Story moderation worker started');
             })
             .catch((error) => console.error('Redis connection failed:', error));
 

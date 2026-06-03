@@ -13,6 +13,9 @@ export class Story {
   @Column('text')
   media_url!: string;
 
+  @Column({ type: 'text', nullable: true })
+  caption!: string;
+
   @Column({
     type: 'enum',
     enum: ['image', 'video'],

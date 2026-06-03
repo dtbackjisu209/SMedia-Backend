@@ -32,9 +32,7 @@ class StoryController {
 		const story = await storyService.createStory(req.userId, req.file, content);
 
 		new CREATED({
-			message: story.moderation?.status === 'WARNING' 
-				? `Story published with warning: ${story.moderation.reason}` 
-				: 'Story published successfully',
+			message: 'Story published successfully',
 			data: story,
 		}).send(res);
 	}

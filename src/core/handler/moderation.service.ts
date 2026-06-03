@@ -77,7 +77,10 @@ export class ContentModerationService {
         body: JSON.stringify({
           model: env.openrouter.model,
           messages: messages,
-          temperature: 0.1 // Giảm sáng tạo để kết quả JSON ổn định hơn
+          temperature: 0.1, // Giảm sáng tạo để kết quả JSON ổn định hơn
+          response_format: {
+            type: "json_object",
+          },
         })
       });
 
@@ -97,18 +100,29 @@ export class ContentModerationService {
       const responseText = data.choices[0].message.content;
       console.log(">>> OPENROUTER RAW RESPONSE:", responseText);
 
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const cleanedResponse = responseText
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
          try {
             return JSON.parse(jsonMatch[0]) as ModerationResult;
          } catch (e) {
             console.error(">>> JSON PARSE ERROR FROM AI RESPONSE:", e);
+            throw new Error(`AI returned invalid JSON: ${cleanedResponse}`);
          }
       }
 
       throw new Error(`AI returned invalid format: ${responseText}`);
     } catch (error: any) {
       console.error("!!! OPENROUTER CRITICAL ERROR:", error);
+
+      if (error?.message?.startsWith("AI returned invalid format") || error?.message?.startsWith("AI returned invalid JSON")) {
+        throw error;
+      }
+
       return {
         status: "SAFE",
         reason: `Lỗi kết nối AI (${error.message?.substring(0, 50)}...)`,

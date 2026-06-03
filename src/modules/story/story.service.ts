@@ -13,7 +13,7 @@ import {
     NotFoundError,
 } from '../../core/handler/error.response.js';
 import notificationService from '../notification/notification.service.js';
-import { ContentModerationService } from '../../core/handler/moderation.service.js';
+import { enqueueStoryModeration } from './queues/story-moderation/story-moderation.producer.js';
 import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class StoryService {
@@ -74,50 +74,9 @@ class StoryService {
         const b64 = Buffer.from(file.buffer).toString('base64');
         const dataURI = "data:" + file.mimetype + ";base64," + b64;
 
-        // 2. Content Moderation (Text + Media)
-        console.log("--- BẮT ĐẦU KIỂM DUYỆT STORY ---");
-        let moderationResult;
-        try {
-            moderationResult = await ContentModerationService.moderateContent(content || "", dataURI, mediaType);
-            console.log('KẾT QUẢ KIỂM DUYỆT TRONG STORY SERVICE:', JSON.stringify(moderationResult, null, 2));
-        } catch (error: any) {
-            console.error('LỖI DỊCH VỤ KIỂM DUYỆT AI:', error);
-            
-            let errorMessage = `Lỗi hệ thống kiểm duyệt AI: ${error.message || 'Không xác định'}.`;
-            
-            if (error.status === 404) {
-                errorMessage = 'Dịch vụ kiểm duyệt AI đang được bảo trì (Lỗi 404 - Model không tìm thấy).';
-            } else if (error.message?.includes('Quota exceeded') || error.status === 429 || error.message?.includes('limit: 0')) {
-                console.warn('AI Quota exceeded or limit 0, bypassing moderation completely...');
-                moderationResult = { status: 'SAFE', reason: 'Bỏ qua kiểm duyệt do hệ thống AI tạm nghỉ', category: 'normal' };
-            } else {
-                throw new Error(errorMessage);
-            }
-        }
-        
-        // KIỂM TRA CHẶN CHẶT CHẼ
-        if (!moderationResult) {
-            moderationResult = { status: 'SAFE', reason: 'Mặc định an toàn', category: 'normal' };
-        }
-        
-        // KIỂM TRA CHẶN CHẶT CHẼ
-        const isViolation = moderationResult.status === 'VIOLATION';
-        const isRestrictedWarning = moderationResult.status === 'WARNING' && 
-            ['violence', 'sexual', 'horror'].includes(moderationResult.category);
-
-        if (isViolation || isRestrictedWarning) {
-            const categoryLabel = moderationResult.category === 'horror' ? 'KINH DỊ' : 
-                                 moderationResult.category === 'violence' ? 'BẠO LỰC' : 
-                                 moderationResult.category === 'sexual' ? 'NHẠY CẢM' : 'VI PHẠM';
-            
-            console.log(`>>> CHẶN THÀNH CÔNG: [${categoryLabel}] - Lý do: ${moderationResult.reason}`);
-            throw new Error(`Nội dung vi phạm chính sách cộng đồng (Yếu tố ${categoryLabel.toLowerCase()}): ${moderationResult.reason}`);
-        }
-
-        console.log(">>> KIỂM DUYỆT THÔNG QUA, BẮT ĐẦU UPLOAD...");
         let mediaUrl = '';
         
-        // 3. Upload to Cloudinary
+        // Upload to Cloudinary
         try {
             const uploadRes = await cloudinary.uploader.upload(dataURI, {
                 resource_type: 'auto',
@@ -143,9 +102,23 @@ class StoryService {
 
         const savedStory = await this.storyRepository.save(story);
         await notificationService.notifyFollowersAboutNewStory(userId, savedStory.id);
+
+        try {
+            await enqueueStoryModeration({
+                storyId: savedStory.id,
+                userId,
+                authorId: userId,
+                caption: savedStory.caption ?? null,
+                mediaUrl: savedStory.media_url,
+                mediaType,
+                enqueuedAtIso: new Date().toISOString(),
+            });
+        } catch (error) {
+            console.error('[story-moderation] enqueue failed:', { storyId: savedStory.id, error });
+        }
+
         return {
-            ...savedStory,
-            moderation: moderationResult
+            ...savedStory
         };
     }
 

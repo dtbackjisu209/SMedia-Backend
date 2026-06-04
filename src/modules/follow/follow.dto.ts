@@ -13,6 +13,10 @@ export interface FollowListQuery {
   limit?: number;
 }
 
+export interface FollowSuggestionQuery {
+  limit?: number;
+}
+
 export interface FollowUserSummary {
   id: number;
   username: string;
@@ -31,6 +35,17 @@ export interface PaginatedFollowResult {
   };
 }
 
+export interface FollowSuggestionItem {
+  id: number;
+  username: string;
+  avatar_url: string | null;
+  score: number;
+}
+
+export interface FollowSuggestionsResult {
+  items: FollowSuggestionItem[];
+}
+
 export interface FollowActionResult {
   mode: 'followed' | 'requested' | 'unfollowed' | 'cancelled_request' | 'accepted' | 'rejected';
   followStatus: 'following' | 'pending' | 'none';
@@ -45,4 +60,9 @@ export const normalizePagination = (query: FollowListQuery): Required<FollowList
     page: page > 0 ? page : 1,
     limit: Math.min(Math.max(limit, 1), 100),
   };
+};
+
+export const normalizeSuggestionLimit = (query: FollowSuggestionQuery): number => {
+  const limit = Number(query.limit) || 5;
+  return Math.min(Math.max(limit, 1), 20);
 };

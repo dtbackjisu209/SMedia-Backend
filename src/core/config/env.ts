@@ -25,6 +25,13 @@ export const env = {
 		url: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
 		queueUrl: process.env.REDIS_URL_QUEUE || process.env.REDIS_URL || 'redis://127.0.0.1:6379',
 	},
+	neo4j: {
+		uri: process.env.NEO4J_URI || 'neo4j://127.0.0.1:7687',
+		username: process.env.NEO4J_USERNAME || 'neo4j',
+		password: process.env.NEO4J_PASSWORD || '',
+		database: process.env.NEO4J_DATABASE || 'neo4j',
+		enabled: process.env.NEO4J_ENABLED !== 'false',
+	},
 	gemini: {
 		apiKey: process.env.GEMINI_API_KEY || process.env.gemini_api_key || '',
 		model: process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest',

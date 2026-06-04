@@ -2,6 +2,7 @@ export * as commentModule from './comment/index.js';
 export * as conversationModule from './conversation/index.js';
 export * as conversationMemberModule from './conversationMember/index.js';
 export * as followModule from './follow/index.js';
+export * as graphModule from './graph/index.js';
 export * as hashtagModule from './hashtag/index.js';
 export * as messageModule from './message/index.js';
 export * as notificationModule from './notification/index.js';

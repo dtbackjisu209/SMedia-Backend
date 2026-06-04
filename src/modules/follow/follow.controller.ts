@@ -5,6 +5,7 @@ import type {
   FollowActionPayload,
   FollowListQuery,
   FollowRequestDecisionPayload,
+  FollowSuggestionQuery,
 } from './follow.dto.js';
 
 const parseId = (value: unknown): number | null => {
@@ -94,6 +95,14 @@ class FollowController {
 
     const query = req.query as FollowListQuery;
     const result = await followService.getFollowing(userId, query);
+    return res.status(200).json({ success: true, data: result });
+  };
+
+  getFollowSuggestions = async (req: Request, res: Response) => {
+    const currentUserId = this.requireAuthUserId(req);
+    const query = req.query as FollowSuggestionQuery;
+
+    const result = await followService.getFollowSuggestions(currentUserId, query);
     return res.status(200).json({ success: true, data: result });
   };
 }

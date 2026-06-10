@@ -55,6 +55,16 @@ export const chatSocket = (io: Server, socket: Socket) => {
     socket.data.activeConversationId = data?.conversationId ? String(data.conversationId) : null;
   });
 
+  socket.on('mark_conversation_read', async (data: { conversationId: string; userId: number | string }) => {
+    try {
+      const result = await chatService.markConversationRead(data.conversationId, data.userId);
+      io.to(`user_${Number(data.userId)}`).emit('conversation_read', result);
+      io.to(`conversation_${data.conversationId}`).emit('conversation_read', result);
+    } catch (error) {
+      console.error('[Socket Error] mark_conversation_read:', error);
+    }
+  });
+
   socket.on('join_private_chat', async (data: { myId: number; targetUserId: number }) => {
     try {
       const conversationId = await chatService.getOrCreateConversation(data.myId, data.targetUserId);
@@ -96,7 +106,7 @@ export const chatSocket = (io: Server, socket: Socket) => {
 
   socket.on(
     'send_message',
-    async (data: { conversationId: string; senderId: string; content: string; replyToMessageId?: string | null }) => {
+    async (data: { conversationId: string; senderId: string; content: string; replyToMessageId?: string | null; clientTempId?: string | null }) => {
     try {
       if (!data.content || !data.content.trim()) return;
 
@@ -107,7 +117,10 @@ export const chatSocket = (io: Server, socket: Socket) => {
         data.replyToMessageId ?? null,
       );
       const roomName = `conversation_${data.conversationId}`;
-      io.to(roomName).emit('new_message', savedMsg);
+      io.to(roomName).emit('new_message', {
+        ...savedMsg,
+        client_temp_id: data.clientTempId ?? null,
+      });
 
       const senderId = Number(data.senderId);
       const memberIds = await chatService.getConversationMemberIds(data.conversationId);

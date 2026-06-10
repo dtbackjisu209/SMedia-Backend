@@ -9,6 +9,7 @@ router.get('/user/:userId', conversationController.getUserConversations.bind(con
 router.post('/private', conversationController.getOrCreatePrivateChat.bind(conversationController));
 router.post('/group', conversationController.createGroupChat.bind(conversationController));
 router.patch('/:id/settings', conversationController.updateConversationSettings.bind(conversationController));
+router.patch('/:id/read', conversationController.markConversationRead.bind(conversationController));
 router.get('/:id/members', conversationController.getConversationMembers.bind(conversationController));
 router.post('/:id/members', conversationController.inviteMember.bind(conversationController));
 router.delete('/:id/members/:userId', conversationController.removeMember.bind(conversationController));

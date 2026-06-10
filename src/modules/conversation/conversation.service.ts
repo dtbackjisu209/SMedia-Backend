@@ -118,6 +118,21 @@ export class ChatService {
     return Boolean(member.muted_until && member.muted_until.getTime() > Date.now());
   }
 
+  private async countUnreadMessages(conversationId: number, userId: number, lastReadAt?: Date | null): Promise<number> {
+    const query = this.messageRepo
+      .createQueryBuilder('message')
+      .leftJoinAndSelect('message.sender', 'sender')
+      .where('message.conversation_id = :conversationId', { conversationId })
+      .andWhere('sender.id != :userId', { userId });
+
+    if (lastReadAt) {
+      query.andWhere('message.created_at > :lastReadAt', { lastReadAt });
+    }
+
+    const messages = await query.getMany();
+    return messages.filter((message) => !this.isMessageDeletedForUser(message, userId)).length;
+  }
+
   private toMessageDto(message: Message, conversationId: string | number, viewerUserId?: number) {
     const hiddenForViewer =
       Number.isFinite(viewerUserId) && viewerUserId
@@ -134,11 +149,44 @@ export class ChatService {
       content: message.is_recalled ? this.recalledMessageText : message.content,
       sender_id: String(message.sender.id),
       sender_name: (message.sender as any)?.full_name || (message.sender as any)?.username || 'Unknown',
+      sender_avatar: (message.sender as any)?.avatar_url || null,
       created_at: message.created_at,
       is_recalled: Boolean(message.is_recalled),
       reply_to: this.buildReplyDto(message.reply_to_message, viewerUserId),
       reactions: this.buildReactionDto(message),
     };
+  }
+
+  private async toMessageDtoWithReadState(message: Message, conversationId: string | number, viewerUserId?: number) {
+    const dto = this.toMessageDto(message, conversationId, viewerUserId);
+    if (!dto) return null;
+
+    const readByUserIds = await this.getMessageReadByUserIds(conversationId, message);
+
+    return {
+      ...dto,
+      read_by_user_ids: readByUserIds.map((id) => String(id)),
+      delivery_status: readByUserIds.length > 0 ? 'seen' : 'delivered',
+    };
+  }
+
+  private async getMessageReadByUserIds(conversationId: string | number, message: Message): Promise<number[]> {
+    const normalizedConversationId = Number(conversationId);
+    const senderId = Number((message.sender as any)?.id);
+
+    if (!Number.isFinite(normalizedConversationId) || normalizedConversationId <= 0 || !Number.isFinite(senderId)) {
+      return [];
+    }
+
+    const members = await this.memberRepo.find({
+      where: { conversation_id: normalizedConversationId as any },
+    });
+
+    return members
+      .filter((member) => Number(member.user_id) !== senderId)
+      .filter((member) => Boolean(member.last_read_at && member.last_read_at.getTime() >= message.created_at.getTime()))
+      .map((member) => Number(member.user_id))
+      .filter((id) => Number.isFinite(id) && id > 0);
   }
 
   async getOrCreateConversation(user1Id: number, user2Id: number): Promise<string> {
@@ -231,6 +279,7 @@ export class ChatService {
         muted_until: currentMembership?.muted_until ?? null,
         muted_forever: Boolean(currentMembership?.muted_forever),
         is_muted: this.isMembershipMuted(currentMembership),
+        unreadCount: await this.countUnreadMessages(Number(convId), userId, currentMembership?.last_read_at ?? null),
         members: members.map((m: any) => ({
           user_id: m.user_id,
           name: m.user?.full_name || m.user?.username || 'User',
@@ -299,7 +348,7 @@ export class ChatService {
       throw new Error('Could not load saved message');
     }
 
-    const dto = this.toMessageDto(fullMsg, conversationId);
+    const dto = await this.toMessageDtoWithReadState(fullMsg, conversationId);
     if (!dto) {
       throw new Error('Could not serialize saved message');
     }
@@ -308,17 +357,75 @@ export class ChatService {
   }
 
   async getConversationMessages(conversationId: string, limit = 50, offset = 0, viewerUserId?: number) {
-    const messages = await this.messageRepo.find({
+    const normalizedConversationId = Number(conversationId);
+    const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 50;
+    const normalizedOffset = Number.isFinite(offset) && offset > 0 ? offset : 0;
+    const total = await this.messageRepo.count({
+      where: { conversation: { id: normalizedConversationId } },
+    });
+    const skip = Math.max(total - normalizedOffset - normalizedLimit, 0);
+    const take = Math.min(normalizedLimit, Math.max(total - normalizedOffset, 0));
+
+    const messages = take > 0 ? await this.messageRepo.find({
       where: { conversation: { id: Number(conversationId) } },
       relations: ['sender', 'reply_to_message', 'reply_to_message.sender'],
       order: { created_at: 'ASC' },
-      take: limit,
-      skip: offset,
+      take,
+      skip,
+    }) : [];
+
+    const items = (await Promise.all(
+      messages.map((message) => this.toMessageDtoWithReadState(message, conversationId, viewerUserId)),
+    )).filter((message): message is NonNullable<typeof message> => Boolean(message));
+
+    return {
+      items,
+      page: Math.floor(normalizedOffset / normalizedLimit) + 1,
+      limit: normalizedLimit,
+      total,
+      hasMore: skip > 0,
+    };
+  }
+
+  async markConversationRead(conversationId: string | number, userId: string | number) {
+    const normalizedConversationId = Number(conversationId);
+    const normalizedUserId = Number(userId);
+
+    if (!Number.isFinite(normalizedConversationId) || normalizedConversationId <= 0) {
+      throw new Error('Invalid conversation id');
+    }
+
+    if (!Number.isFinite(normalizedUserId) || normalizedUserId <= 0) {
+      throw new Error('Invalid user id');
+    }
+
+    await this.assertConversationMember(normalizedConversationId, normalizedUserId);
+
+    const latestMessage = await this.messageRepo.findOne({
+      where: { conversation: { id: normalizedConversationId } },
+      order: { created_at: 'DESC' },
     });
 
-    return messages
-      .map((message) => this.toMessageDto(message, conversationId, viewerUserId))
-      .filter((message): message is NonNullable<typeof message> => Boolean(message));
+    const membership = await this.memberRepo.findOne({
+      where: {
+        conversation_id: normalizedConversationId as any,
+        user_id: normalizedUserId as any,
+      },
+    });
+
+    if (!membership) {
+      throw new Error('You are not a member of this conversation');
+    }
+
+    membership.last_read_at = latestMessage?.created_at ?? new Date();
+    await this.memberRepo.save(membership);
+
+    return {
+      conversationId: String(normalizedConversationId),
+      userId: String(normalizedUserId),
+      last_read_at: membership.last_read_at,
+      unreadCount: 0,
+    };
   }
 
   async deleteMessageForSelf(messageId: string | number, userId: string | number) {

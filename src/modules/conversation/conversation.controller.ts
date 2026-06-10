@@ -168,6 +168,19 @@ class ConversationController {
       return res.status(status).json({ success: false, message: error?.message || 'Error while updating conversation settings' });
     }
   }
+
+  async markConversationRead(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = Number(req.body.userId ?? req.query.userId ?? 0);
+      const result = await chatService.markConversationRead(conversationId, userId);
+      return res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('[ConversationController] markConversationRead:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while marking conversation read' });
+    }
+  }
 }
 
 export default new ConversationController();

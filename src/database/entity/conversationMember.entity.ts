@@ -19,6 +19,9 @@ export class ConversationMember {
   @Column({ type: 'boolean', default: false })
   muted_forever!: boolean;
 
+  @Column({ type: 'datetime', nullable: true })
+  last_read_at!: Date | null;
+
   @ManyToOne(() => Conversation)
   @JoinColumn({ name: 'conversation_id' })
   conversation!: Conversation;

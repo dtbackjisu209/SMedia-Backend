@@ -18,6 +18,7 @@ import { FixMissingColumns1775600000000 } from './database/migrations/1775600000
 import { AddStoryHighlights1775700000000 } from './database/migrations/1775700000000-add-story-highlights.js';
 import { AddCaptionToStory1775800000000 } from './database/migrations/1775800000000-add-caption-to-story.js';
 import { AddActorToNotifications1775900000000 } from './database/migrations/1775900000000-add-actor-to-notifications.js';
+import { AddLastReadAtToConversationMember1776000000000 } from './database/migrations/1776000000000-add-last-read-at-to-conversation-member.js';
 import {
   User,
   Post,
@@ -84,6 +85,7 @@ export const AppDataSource = new DataSource({
     AddStoryHighlights1775700000000,
     AddCaptionToStory1775800000000,
     AddActorToNotifications1775900000000,
+    AddLastReadAtToConversationMember1776000000000,
   ],
   migrationsRun: true,
 });

@@ -6,6 +6,7 @@ import profileController from './profile.controller.js';
 const router = Router();
 
 router.get('/search', asyncHandler(profileController.search));
+router.post('/users/:userId/search-view', authMiddleware, asyncHandler(profileController.recordSearchView));
 router.get('/users/:userId', authMiddleware, asyncHandler(profileController.getProfile));
 router.patch('/me', authMiddleware, asyncHandler(profileController.updateMyProfile));
 router.patch('/me/password', authMiddleware, asyncHandler(profileController.changeMyPassword));

@@ -89,3 +89,4 @@ export const AppDataSource = new DataSource({
   ],
   migrationsRun: true,
 });
+

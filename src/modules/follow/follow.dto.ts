@@ -40,6 +40,9 @@ export interface FollowSuggestionItem {
   username: string;
   avatar_url: string | null;
   score: number;
+  mutual_follow_count?: number;
+  search_view_count?: number;
+  recency_score?: number;
 }
 
 export interface FollowSuggestionsResult {

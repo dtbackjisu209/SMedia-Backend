@@ -520,6 +520,9 @@ class FollowService {
         username: suggestion.username,
         avatar_url: suggestion.avatarUrl,
         score: suggestion.score,
+        mutual_follow_count: suggestion.mutualFollowCount,
+        search_view_count: suggestion.searchViewCount,
+        recency_score: suggestion.recencyScore,
       })),
     };
   }

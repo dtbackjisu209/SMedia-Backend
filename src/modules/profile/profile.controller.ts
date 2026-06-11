@@ -3,9 +3,13 @@ import { BadRequestError } from '../../core/handler/error.response.js';
 import type {
   ProfilePasswordChangeDto,
   ProfileSearchQueryDto,
+  ProfileSearchViewPayloadDto,
   ProfileUpdateDto,
 } from './profile.dto.js';
 import profileService from './profile.service.js';
+import profileRepository from './profile.repository.js';
+import graphService from '../graph/graph.service.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class ProfileController {
   private requireAuthUserId(req: Request): number {
@@ -20,6 +24,44 @@ class ProfileController {
     const query = req.query as ProfileSearchQueryDto;
     const users = await profileService.searchUsers(query);
     return res.status(200).json({ success: true, data: users });
+  };
+
+  recordSearchView = async (req: Request, res: Response) => {
+    const viewerUserId = this.requireAuthUserId(req);
+    const targetUserId = Number(req.params.userId);
+    if (!Number.isFinite(targetUserId) || targetUserId <= 0) {
+      throw new BadRequestError('Invalid user id');
+    }
+
+    if (viewerUserId === targetUserId) {
+      return res.status(200).json({ success: true, data: { recorded: false } });
+    }
+
+    const [viewer, target] = await Promise.all([
+      profileRepository.findUserById(viewerUserId),
+      profileRepository.findUserById(targetUserId),
+    ]);
+
+    if (!viewer || !target) {
+      throw new BadRequestError('Invalid user id');
+    }
+
+    const payload = req.body as ProfileSearchViewPayloadDto;
+    await graphService.recordSearchProfileView(
+      {
+        id: viewer.id,
+        username: viewer.username,
+        avatarUrl: normalizePublicAssetUrl(viewer.avatar_url),
+      },
+      {
+        id: target.id,
+        username: target.username,
+        avatarUrl: normalizePublicAssetUrl(target.avatar_url),
+      },
+      payload.query,
+    );
+
+    return res.status(200).json({ success: true, data: { recorded: true } });
   };
 
   getProfile = async (req: Request, res: Response) => {

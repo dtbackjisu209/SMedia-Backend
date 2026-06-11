@@ -98,6 +98,80 @@ class ConversationController {
       return res.status(500).json({ success: false, message: 'Error while fetching group candidates' });
     }
   }
+
+  async getConversationMembers(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const members = await chatService.getConversationMembers(conversationId);
+      return res.status(200).json({ success: true, data: members });
+    } catch (error) {
+      console.error('[ConversationController] getConversationMembers:', error);
+      return res.status(500).json({ success: false, message: 'Error while fetching members' });
+    }
+  }
+
+  async inviteMember(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = Number(req.body.userId);
+      const requesterId = Number(req.body.requesterId);
+      const members = await memberService.addMember(conversationId, userId, requesterId);
+      return res.status(201).json({ success: true, data: members });
+    } catch (error: any) {
+      console.error('[ConversationController] inviteMember:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while inviting member' });
+    }
+  }
+
+  async removeMember(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = Number(req.params.userId);
+      const requesterId = Number(req.query.requesterId ?? 0);
+      const members = await memberService.removeMember(conversationId, userId, requesterId);
+      return res.status(200).json({ success: true, data: members });
+    } catch (error: any) {
+      console.error('[ConversationController] removeMember:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while removing member' });
+    }
+  }
+
+  async updateConversationSettings(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const requesterId = Number(req.body.requesterId);
+      const nickname =
+        req.body.nickname === undefined ? undefined : req.body.nickname === null ? null : String(req.body.nickname);
+      const muteMode =
+        req.body.muteMode === undefined ? undefined : String(req.body.muteMode) as '1h' | '8h' | '24h' | 'forever' | 'unmute';
+
+      const settings = await memberService.updateOwnSettings(conversationId, requesterId, {
+        nickname,
+        muteMode,
+      });
+
+      return res.status(200).json({ success: true, data: settings });
+    } catch (error: any) {
+      console.error('[ConversationController] updateConversationSettings:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while updating conversation settings' });
+    }
+  }
+
+  async markConversationRead(req: Request, res: Response) {
+    try {
+      const conversationId = Number(req.params.id);
+      const userId = Number(req.body.userId ?? req.query.userId ?? 0);
+      const result = await chatService.markConversationRead(conversationId, userId);
+      return res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('[ConversationController] markConversationRead:', error);
+      const status = Number(error?.statusCode ?? error?.status ?? 500);
+      return res.status(status).json({ success: false, message: error?.message || 'Error while marking conversation read' });
+    }
+  }
 }
 
 export default new ConversationController();

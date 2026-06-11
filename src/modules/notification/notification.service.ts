@@ -13,6 +13,7 @@ import type {
   NotificationSummaryDto,
 } from './notification.dto.js';
 import { emitNotificationToUser } from './notification.socket.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 const MAX_LIMIT = 100;
 
@@ -25,6 +26,14 @@ class NotificationService {
       reference_id: notification.reference_id ? Number(notification.reference_id) : null,
       is_read: Boolean(notification.is_read),
       created_at: notification.created_at,
+      actor: notification.actor
+        ? {
+            id: Number(notification.actor.id),
+            username: notification.actor.username,
+            full_name: notification.actor.full_name ?? null,
+            avatar_url: normalizePublicAssetUrl(notification.actor.avatar_url),
+          }
+        : null,
     };
   }
 
@@ -37,6 +46,18 @@ class NotificationService {
     }
 
     const saved = await notificationRepository.createNotification(input, options?.manager);
+    if (input.actorId) {
+      const userRepo = options?.manager
+        ? options.manager.getRepository(User)
+        : AppDataSource.getRepository(User);
+      const actor = await userRepo.findOne({
+        where: { id: input.actorId },
+        select: ['id', 'username', 'full_name', 'avatar_url'],
+      });
+      if (actor) {
+        saved.actor = actor;
+      }
+    }
     const item = this.toItem(saved);
 
     if (options?.emit !== false) {
@@ -135,6 +156,24 @@ class NotificationService {
     });
   }
 
+  async notifyPostRemovedForCommunityViolation(userId: number, postId: number): Promise<void> {
+    await this.createNotification({
+      userId,
+      type: 'message',
+      referenceId: postId,
+      content: 'Bài viết của bạn vi phạm tiêu chuẩn cộng đồng và đã bị xóa.',
+    });
+  }
+
+  async notifyStoryRemovedForCommunityViolation(userId: number, storyId: number): Promise<void> {
+    await this.createNotification({
+      userId,
+      type: 'message',
+      referenceId: storyId,
+      content: 'Story của bạn vi phạm tiêu chuẩn cộng đồng và đã bị xóa.',
+    });
+  }
+
   private async notifyFollowers(
     authorId: number,
     input: {
@@ -165,6 +204,7 @@ class NotificationService {
     const items = followerIds.map((userId) =>
       this.createNotification({
         userId,
+        actorId: author.id,
         type: input.type,
         referenceId: input.referenceId,
         content,
@@ -200,6 +240,7 @@ class NotificationService {
 
     await this.createNotification({
       userId: postOwnerId,
+      actorId: actor.id,
       type: input.type,
       referenceId: postId,
       content: input.buildContent(actor.full_name || actor.username),

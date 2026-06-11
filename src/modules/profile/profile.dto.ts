@@ -3,6 +3,10 @@ export interface ProfileSearchQueryDto {
   limit?: number;
 }
 
+export interface ProfileSearchViewPayloadDto {
+  query?: string;
+}
+
 export interface ProfileUserSummaryDto {
   id: number;
   username: string;

@@ -3,6 +3,7 @@ import type { NotificationType } from '../../database/entity/notification.entity
  
 export type CreateNotificationDto = {
   userId: number;
+  actorId?: number | null;
   type: NotificationType;
   content: string;
   referenceId?: number | null;
@@ -15,6 +16,12 @@ export interface NotificationItemDto {
   reference_id: number | null;
   is_read: boolean;
   created_at: Date;
+  actor: {
+    id: number;
+    username: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  } | null;
 };
 
 export type NotificationListQueryDto = {

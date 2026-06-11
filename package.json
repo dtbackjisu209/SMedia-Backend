@@ -16,6 +16,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.73.4",
     "class-transformer": "^0.5.1",
@@ -27,6 +28,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "mysql2": "^3.16.2",
+    "neo4j-driver": "^6.0.1",
     "redis": "^5.8.2",
     "reflect-metadata": "^0.2.2",
     "socket.io": "^4.8.3",
@@ -41,7 +43,7 @@
     "@types/socket.io": "^3.0.1",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.22.3",
     "typescript": "^5.9.3"
   }
 }

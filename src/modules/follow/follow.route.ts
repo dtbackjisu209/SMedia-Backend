@@ -9,6 +9,7 @@ router.post('/follow', authMiddleware, asyncHandler(followController.follow));
 router.delete('/follow', authMiddleware, asyncHandler(followController.unfollow));
 router.post('/follow/accept', authMiddleware, asyncHandler(followController.acceptRequest));
 router.post('/follow/reject', authMiddleware, asyncHandler(followController.rejectRequest));
+router.get('/follow/suggestions', authMiddleware, asyncHandler(followController.getFollowSuggestions));
 
 router.get('/users/:userId/followers', asyncHandler(followController.getFollowers));
 router.get('/users/:userId/following', asyncHandler(followController.getFollowing));

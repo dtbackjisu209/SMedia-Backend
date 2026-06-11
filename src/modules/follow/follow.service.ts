@@ -13,9 +13,13 @@ import type {
   FollowUserSummary,
   PaginatedFollowResult,
   FollowListQuery,
+  FollowSuggestionQuery,
+  FollowSuggestionsResult,
 } from './follow.dto.js';
-import { normalizePagination } from './follow.dto.js';
+import { normalizePagination, normalizeSuggestionLimit } from './follow.dto.js';
 import notificationService from '../notification/notification.service.js';
+import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
+import graphService from '../graph/graph.service.js';
 
 const CACHE_TTL_SECONDS = 120;
 const FOLLOW_FEED_WARMUP_LIMIT = 10;
@@ -38,6 +42,38 @@ const maybeParseCount = (value: string | null): number | null => {
 };
 
 class FollowService {
+  private toGraphUser(user: User) {
+    return {
+      id: user.id,
+      username: user.username,
+      avatarUrl: normalizePublicAssetUrl(user.avatar_url),
+    };
+  }
+
+  private async syncGraphFollow(follower: User, following: User): Promise<void> {
+    try {
+      await graphService.createFollow(this.toGraphUser(follower), this.toGraphUser(following));
+    } catch (error) {
+      console.error('[follow] Neo4j follow sync failed:', {
+        followerId: follower.id,
+        followingId: following.id,
+        error,
+      });
+    }
+  }
+
+  private async syncGraphUnfollow(followerId: number, followingId: number): Promise<void> {
+    try {
+      await graphService.deleteFollow(followerId, followingId);
+    } catch (error) {
+      console.error('[follow] Neo4j unfollow sync failed:', {
+        followerId,
+        followingId,
+        error,
+      });
+    }
+  }
+
   private async cleanupUnfollowedAuthorFromViewerFeed(
     viewerUserId: number,
     targetAuthorId: number,
@@ -170,6 +206,7 @@ class FollowService {
         createdNotification = await notificationService.createNotification(
           {
             userId: targetUser.id,
+            actorId: currentUser.id,
             type: 'follow',
             referenceId: currentUser.id,
             content: `${currentUser.full_name || currentUser.username} started following you.`,
@@ -183,6 +220,7 @@ class FollowService {
       }
 
       await this.invalidateCountCache([currentUser.id, targetUser.id]);
+      await this.syncGraphFollow(currentUser, targetUser);
       await this.warmFollowerFeedAfterFollow(currentUser.id, targetUser.id);
 
       return {
@@ -219,6 +257,7 @@ class FollowService {
       createdNotification = await notificationService.createNotification(
         {
           userId: targetUser.id,
+          actorId: currentUser.id,
           type: 'follow_request',
           referenceId: currentUser.id,
           content: `${currentUser.full_name || currentUser.username} requested to follow you.`,
@@ -279,6 +318,8 @@ class FollowService {
     await this.invalidateCountCache([currentUserId, targetUserId]);
 
     if (result.mode === 'unfollowed') {
+      await this.syncGraphUnfollow(currentUserId, targetUserId);
+
       try {
         await this.cleanupUnfollowedAuthorFromViewerFeed(currentUserId, targetUserId);
       } catch (error) {
@@ -316,7 +357,7 @@ class FollowService {
       throw new BadRequestError('Invalid follow request');
     }
 
-    const [currentUser] = await Promise.all([
+    const [currentUser, requesterUser] = await Promise.all([
       this.ensureUserExists(currentUserId),
       this.ensureUserExists(requesterId),
     ]);
@@ -361,6 +402,7 @@ class FollowService {
       createdNotification = await notificationService.createNotification(
         {
           userId: requesterId,
+          actorId: currentUser.id,
           type: 'follow_accept',
           referenceId: currentUserId,
           content: `${currentUser.full_name || currentUser.username} accepted your follow request.`,
@@ -374,6 +416,7 @@ class FollowService {
     }
 
     await this.invalidateCountCache([currentUserId, requesterId]);
+    await this.syncGraphFollow(requesterUser, currentUser);
     await this.warmFollowerFeedAfterFollow(requesterId, currentUserId);
 
     return {
@@ -462,6 +505,25 @@ class FollowService {
         total,
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
+    };
+  }
+
+  async getFollowSuggestions(currentUserId: number, query: FollowSuggestionQuery): Promise<FollowSuggestionsResult> {
+    await this.ensureUserExists(currentUserId);
+
+    const limit = normalizeSuggestionLimit(query);
+    const suggestions = await graphService.getFollowSuggestions(currentUserId, limit);
+
+    return {
+      items: suggestions.map((suggestion) => ({
+        id: suggestion.id,
+        username: suggestion.username,
+        avatar_url: suggestion.avatarUrl,
+        score: suggestion.score,
+        mutual_follow_count: suggestion.mutualFollowCount,
+        search_view_count: suggestion.searchViewCount,
+        recency_score: suggestion.recencyScore,
+      })),
     };
   }
 }

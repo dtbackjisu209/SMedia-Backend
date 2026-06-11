@@ -7,6 +7,12 @@ import storyController from './story.controller.js';
 const router = Router();
 
 router.post(
+	'/moderate',
+	authMiddleware,
+	asyncHandler(storyController.moderateContent),
+);
+
+router.post(
 	'/',
 	authMiddleware,
 	upload.single('file'),

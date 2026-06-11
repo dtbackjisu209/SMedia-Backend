@@ -9,6 +9,16 @@ import { AddUserInteractionsTable1775000000000 } from './database/migrations/177
 import { AddPostUpdatedAt1775300000000 } from './database/migrations/1775300000000-add-post-updated-at.js';
 import { ExpandNotifications1775200000000 } from './database/migrations/1775200000000-expand-notifications.js';
 import { AddNotificationHiddenFlag1775300000000 } from './database/migrations/1775300000000-add-notification-hidden-flag.js';
+
+import { AddMessageRepliesAndReactions1775400000000 } from './database/migrations/1775400000000-add-message-replies-and-reactions.js';
+import { AddNewPostNotificationTypes1775400000000 } from './database/migrations/1775400000000-add-new-post-notification-types.js';
+import { AddNicknameToConversationMember1775500000000 } from './database/migrations/1775500000000-add-nickname-to-conversation-member.js';
+import { AddMuteFieldsToConversationMember1775500000001 } from './database/migrations/1775500000001-add-mute-fields-to-conversation-member.js';
+import { FixMissingColumns1775600000000 } from './database/migrations/1775600000000-fix-missing-columns.js';
+import { AddStoryHighlights1775700000000 } from './database/migrations/1775700000000-add-story-highlights.js';
+import { AddCaptionToStory1775800000000 } from './database/migrations/1775800000000-add-caption-to-story.js';
+import { AddActorToNotifications1775900000000 } from './database/migrations/1775900000000-add-actor-to-notifications.js';
+import { AddLastReadAtToConversationMember1776000000000 } from './database/migrations/1776000000000-add-last-read-at-to-conversation-member.js';
 import {
   User,
   Post,
@@ -62,6 +72,17 @@ export const AppDataSource = new DataSource({
     AddPostUpdatedAt1775300000000,
     ExpandNotifications1775200000000,
     AddNotificationHiddenFlag1775300000000,
+
+    AddMessageRepliesAndReactions1775400000000,
+    AddNewPostNotificationTypes1775400000000,
+    AddNicknameToConversationMember1775500000000,
+    AddMuteFieldsToConversationMember1775500000001,
+    FixMissingColumns1775600000000,
+    AddStoryHighlights1775700000000,
+    AddCaptionToStory1775800000000,
+    AddActorToNotifications1775900000000,
+    AddLastReadAtToConversationMember1776000000000,
   ],
   migrationsRun: true,
 });
+

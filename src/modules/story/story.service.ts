@@ -1,25 +1,16 @@
 import { AppDataSource } from '../../data-source.js';
 import { Story } from '../../database/entity/story.entity.js';
-import { StoryHighlight } from '../../database/entity/storyHighlight.entity.js';
-import { StoryHighlightItem } from '../../database/entity/storyHighlightItem.entity.js';
 import { User } from '../../database/entity/user.entity.js';
 import { Follow } from '../../database/entity/follow.entity.js';
 import { cloudinary } from '../../core/config/cloudinary.js';
 import { In, MoreThan } from 'typeorm';
-import {
-    BadRequestError,
-    ConflictRequestError,
-    ForbiddenError,
-    NotFoundError,
-} from '../../core/handler/error.response.js';
+import fs from 'fs';
 import notificationService from '../notification/notification.service.js';
 import { enqueueStoryModeration } from './queues/story-moderation/story-moderation.producer.js';
 import { normalizePublicAssetUrl } from '../../utils/publicAssetUrl.js';
 
 class StoryService {
     private storyRepository = AppDataSource.getRepository(Story);
-    private storyHighlightRepository = AppDataSource.getRepository(StoryHighlight);
-    private storyHighlightItemRepository = AppDataSource.getRepository(StoryHighlightItem);
     private userRepository = AppDataSource.getRepository(User);
     private followRepository = AppDataSource.getRepository(Follow);
 
@@ -48,7 +39,7 @@ class StoryService {
                 userMap.set(uId, {
                     userId: String(uId),
                     username: s.user.username,
-                    avatar_url: normalizePublicAssetUrl(s.user.avatar_url),
+                    avatar_url: s.user.avatar_url,
                     stories: []
                 });
             }

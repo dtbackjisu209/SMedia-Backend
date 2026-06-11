@@ -4,45 +4,55 @@ import { ConversationMemberService } from './conversationMember.service.js';
 const memberService = new ConversationMemberService();
 
 export class ConversationMemberController {
-  async listMembers(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const members = await memberService.getMembersByConversation(Number(id));
-      return res.status(200).json({ success: true, data: members });
-    } catch (error) {
-      console.error('[MemberController] listMembers:', error);
-      return res.status(500).json({ success: false, message: 'Error while fetching conversation members' });
+    /**
+     * GET /api/v1/conversations/:id/members
+     * Lấy danh sách thành viên
+     */
+    async listMembers(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const members = await memberService.getMembersByConversation(Number(id));
+            return res.status(200).json({ success: true, data: members });
+        } catch (error) {
+            console.error('[MemberController] listMembers:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi lấy danh sách thành viên' });
+        }
     }
-  }
 
-  async inviteMember(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const { userId, requesterId } = req.body;
+    /**
+     * POST /api/v1/conversations/:id/members
+     * Body: { userId: number }
+     * Mời thành viên vào nhóm
+     */
+    async inviteMember(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const { userId } = req.body;
 
-      if (!userId || !requesterId) {
-        return res.status(400).json({ success: false, message: 'userId and requesterId are required' });
-      }
+            if (!userId) {
+                return res.status(400).json({ success: false, message: 'Thiếu userId' });
+            }
 
-      const result = await memberService.addMember(Number(id), Number(userId), Number(requesterId));
-      return res.status(201).json({ success: true, data: result });
-    } catch (error: any) {
-      console.error('[MemberController] inviteMember:', error);
-      const status = Number(error?.statusCode ?? error?.status ?? 500);
-      return res.status(status).json({ success: false, message: error?.message || 'Error while inviting member' });
+            const result = await memberService.addMember(Number(id), Number(userId));
+            return res.status(201).json({ success: true, data: result });
+        } catch (error) {
+            console.error('[MemberController] inviteMember:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi thêm thành viên' });
+        }
     }
-  }
 
-  async removeMember(req: Request, res: Response) {
-    try {
-      const { id, userId } = req.params;
-      const requesterId = Number(req.query.requesterId ?? 0);
-      const result = await memberService.removeMember(Number(id), Number(userId), requesterId);
-      return res.status(200).json({ success: true, data: result, message: 'Member removed successfully' });
-    } catch (error: any) {
-      console.error('[MemberController] removeMember:', error);
-      const status = Number(error?.statusCode ?? error?.status ?? 500);
-      return res.status(status).json({ success: false, message: error?.message || 'Error while removing member' });
+    /**
+     * DELETE /api/v1/conversations/:id/members/:userId
+     * Xóa thành viên hoặc rời nhóm
+     */
+    async removeMember(req: Request, res: Response) {
+        try {
+            const { id, userId } = req.params;
+            await memberService.removeMember(Number(id), Number(userId));
+            return res.status(200).json({ success: true, message: 'Đã rời nhóm thành công' });
+        } catch (error) {
+            console.error('[MemberController] removeMember:', error);
+            return res.status(500).json({ success: false, message: 'Lỗi khi rời nhóm' });
+        }
     }
-  }
 }

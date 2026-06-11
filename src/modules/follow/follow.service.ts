@@ -31,7 +31,7 @@ const toUserSummary = (user: User): FollowUserSummary => ({
   id: user.id,
   username: user.username,
   full_name: user.full_name,
-  avatar_url: normalizePublicAssetUrl(user.avatar_url),
+  avatar_url: user.avatar_url,
   is_private: user.is_private,
 });
 

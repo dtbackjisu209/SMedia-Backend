@@ -110,12 +110,7 @@ export const chatSocket = (io: Server, socket: Socket) => {
     try {
       if (!data.content || !data.content.trim()) return;
 
-      const savedMsg = await chatService.saveMessage(
-        data.conversationId,
-        data.senderId,
-        data.content,
-        data.replyToMessageId ?? null,
-      );
+      const savedMsg = await chatService.saveMessage(data.conversationId, data.senderId, data.content);
       const roomName = `conversation_${data.conversationId}`;
       io.to(roomName).emit('new_message', {
         ...savedMsg,
@@ -125,12 +120,10 @@ export const chatSocket = (io: Server, socket: Socket) => {
       const senderId = Number(data.senderId);
       const memberIds = await chatService.getConversationMemberIds(data.conversationId);
       const recipientIds = memberIds.filter((memberId) => memberId !== senderId);
+      const preview = data.content.trim().slice(0, 80);
 
       await Promise.all(
         recipientIds.map(async (recipientId) => {
-          const isMuted = await chatService.isConversationMutedForUser(data.conversationId, recipientId);
-          if (isMuted) return;
-
           const isReadingThisConversation = await hasRecipientOpenedConversation(io, recipientId, data.conversationId);
           if (isReadingThisConversation) return;
 
@@ -139,7 +132,7 @@ export const chatSocket = (io: Server, socket: Socket) => {
             actorId: senderId,
             type: 'message',
             referenceId: Number(data.conversationId),
-            content: `${savedMsg.sender_name} đã nhắn tin cho bạn, nhấn vào để xem chi tiết.`,
+            content: `${savedMsg.sender_name} sent you a message: ${preview}`,
           });
         }),
       );
@@ -149,77 +142,18 @@ export const chatSocket = (io: Server, socket: Socket) => {
       console.error('[Socket Error] send_message:', error);
       socket.emit('error', 'Could not send message');
     }
-  },
-  );
-
-  socket.on(
-    'delete_message',
-    async (
-      data: { messageId: string; userId: string; mode: 'self' | 'everyone' },
-      ack?: (payload: { success: boolean; message?: string }) => void,
-    ) => {
-    try {
-      if (!data?.messageId || !data?.userId || !data?.mode) {
-        ack?.({ success: false, message: 'Invalid delete message payload' });
-        return;
-      }
-
-      if (data.mode === 'self') {
-        const result = await chatService.deleteMessageForSelf(data.messageId, data.userId);
-        socket.emit('message_deleted', result);
-        ack?.({ success: true });
-        return;
-      }
-
-      const result = await chatService.recallMessageForEveryone(data.messageId, data.userId);
-      io.to(`conversation_${result.conversationId}`).emit('message_deleted', result);
-      ack?.({ success: true });
-    } catch (error) {
-      console.error('[Socket Error] delete_message:', error);
-      const message = error instanceof Error ? error.message : 'Could not delete message';
-      socket.emit('chat_error', message);
-      ack?.({ success: false, message });
-    }
-  },
-  );
-
-  socket.on(
-    'toggle_message_reaction',
-    async (
-      data: { messageId: string; userId: string; emoji: string },
-      ack?: (payload: { success: boolean; message?: string }) => void,
-    ) => {
-    try {
-      if (!data?.messageId || !data?.userId || !data?.emoji) {
-        ack?.({ success: false, message: 'Invalid reaction payload' });
-        return;
-      }
-
-      const result = await chatService.toggleMessageReaction(data.messageId, data.userId, data.emoji);
-      io.to(`conversation_${result.conversationId}`).emit('message_reaction_updated', result);
-      ack?.({ success: true });
-    } catch (error) {
-      console.error('[Socket Error] toggle_message_reaction:', error);
-      const message = error instanceof Error ? error.message : 'Could not update reaction';
-      socket.emit('chat_error', message);
-      ack?.({ success: false, message });
-    }
-  },
-  );
+  });
 
   socket.on('typing', (data: { conversationId: string; senderName: string }) => {
     const roomName = `conversation_${data.conversationId}`;
     socket.to(roomName).emit('user_typing', {
-      conversationId: String(data.conversationId),
       message: `${data.senderName} is typing...`,
     });
   });
 
   socket.on('stop_typing', (data: { conversationId: string }) => {
     const roomName = `conversation_${data.conversationId}`;
-    socket.to(roomName).emit('user_stop_typing', {
-      conversationId: String(data.conversationId),
-    });
+    socket.to(roomName).emit('user_stop_typing');
   });
 
   socket.on('request_presence_snapshot', () => {

@@ -1,8 +1,5 @@
 import { Request, Response } from 'express';
 import chatService from './conversation.service.js';
-import { ConversationMemberService } from '../conversationMember/conversationMember.service.js';
-
-const memberService = new ConversationMemberService();
 
 class ConversationController {
   async getUserConversations(req: Request, res: Response) {
@@ -50,15 +47,9 @@ class ConversationController {
       const limit = Number(req.query.limit) || 50;
       const page = Number(req.query.page) || 1;
       const offset = (page - 1) * limit;
-      const viewerUserId = Number(req.query.viewerUserId ?? 0);
 
       const conversationId = Array.isArray(id) ? id[0] : id;
-      const messages = await chatService.getConversationMessages(
-        conversationId,
-        limit,
-        offset,
-        Number.isFinite(viewerUserId) && viewerUserId > 0 ? viewerUserId : undefined,
-      );
+      const messages = await chatService.getConversationMessages(conversationId, limit, offset);
       return res.status(200).json({ success: true, data: messages });
     } catch (error) {
       console.error('[ConversationController] getMessages:', error);

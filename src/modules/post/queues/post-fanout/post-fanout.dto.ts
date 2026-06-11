@@ -3,7 +3,6 @@ export type PostFeedFanoutJobData = {
 	userId: number;
 	caption: string | null;
 	location: string | null;
-	tags: string[];
 	createdAtIso: string;
 	likeCount: number;
 	commentCount: number;

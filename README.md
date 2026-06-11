@@ -598,6 +598,109 @@ Neo4j stores the graph:
 (User)-[:VIEWED_FROM_SEARCH {count, firstSeenAt, lastSeenAt, lastQuery}]->(User)
 ```
 
+### Why Neo4j instead of MySQL for follow suggestions?
+
+Social graphs are fundamentally about **relationships and traversal**. Finding "friends of friends" requires following edges across nodes, which maps naturally to a graph database but becomes expensive in a relational one.
+
+#### The same query in both databases
+
+**Scenario:** Find users that `userA` does not follow yet, but who are followed by people `userA` already follows (mutual-follow suggestions), ordered by how many mutual connections they share.
+
+MySQL approach:
+
+```sql
+SELECT
+    f2.following_id AS suggested_user,
+    COUNT(*) AS mutual_count
+FROM follows f1
+JOIN follows f2 ON f1.following_id = f2.follower_id
+WHERE f1.follower_id = :userId
+  AND f2.following_id != :userId
+  AND f2.following_id NOT IN (
+      SELECT following_id FROM follows WHERE follower_id = :userId
+  )
+GROUP BY f2.following_id
+ORDER BY mutual_count DESC
+LIMIT 10;
+```
+
+Neo4j approach (Cypher):
+
+```cypher
+MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend:User)-[:FOLLOWS]->(suggested:User)
+WHERE suggested.id <> $userId
+  AND NOT (me)-[:FOLLOWS]->(suggested)
+WITH suggested, COUNT(friend) AS mutualCount
+ORDER BY mutualCount DESC
+LIMIT 10
+RETURN suggested.id, mutualCount
+```
+
+Both return the same result. But the execution model is fundamentally different.
+
+#### How each database handles the traversal
+
+MySQL stores relationships as rows in a `follows` table. To find friends of friends it must:
+
+1. Scan or index-lookup all rows where `follower_id = userId` → get direct friends.
+2. For each direct friend, scan again where `follower_id = friendId` → get their friends.
+3. Join and filter out users already followed.
+4. Aggregate and sort.
+
+Every hop is a join. At depth 2 this means two full index scans plus a self-join. At depth 3 (friends of friends of friends) it becomes three joins, and the intermediate result set can grow into millions of rows before filtering.
+
+Neo4j stores relationships as first-class pointers on disk. Each node directly holds references to its connected edges. Traversal means following memory pointers rather than scanning and joining tables. Adding more hops (depth 3, 4) does not change the query structure — it only adds one more `-[:FOLLOWS]->` step to the Cypher pattern.
+
+#### Comparison
+
+| Criterion | MySQL | Neo4j |
+|---|---|---|
+| Data model | Rows in `follows` table | Native nodes and edges |
+| Depth-2 query | 2 self-joins, index scans | Pointer traversal, no joins |
+| Depth-3+ query | Exponentially more expensive | One extra hop in Cypher |
+| Search-view signal | Extra join to another table | Second edge type on same graph |
+| Combined scoring query | Complex multi-join + subquery | Single Cypher pattern |
+| Read performance at scale | Degrades with follower count | Stays stable (index-free adjacency) |
+| Write overhead | Simple INSERT/DELETE | Sync required (extra job) |
+| Operational complexity | Already in stack | Extra service to run and maintain |
+| Team familiarity | High | Lower — Cypher is a new query language |
+
+#### Why this project uses Neo4j
+
+The follow suggestion feature combines two signals:
+
+1. **Mutual follows** — friends of friends in the follow graph.
+2. **Search-view history** — users whose profile the viewer has recently searched for or clicked on.
+
+In MySQL, combining these signals means joining `follows` (twice, for depth 2) with a `search_views` table and then aggregating with weights. The query becomes a multi-level self-join with subqueries. It works, but it is difficult to extend — adding a third signal (e.g. users who liked the same posts) requires another join and the query grows further.
+
+In Neo4j the two signals are just two edge types on the same graph: `[:FOLLOWS]` and `[:VIEWED_FROM_SEARCH]`. Adding a third signal means adding a third edge type and one more `MATCH` clause. The scoring formula stays readable:
+
+```cypher
+MATCH (me:User {id: $userId})-[:FOLLOWS]->(friend)-[:FOLLOWS]->(suggested)
+WHERE suggested <> me AND NOT (me)-[:FOLLOWS]->(suggested)
+WITH suggested, COUNT(friend) AS mutualCount
+
+OPTIONAL MATCH (me)-[v:VIEWED_FROM_SEARCH]->(suggested)
+WITH suggested, mutualCount, COALESCE(v.count, 0) AS viewCount, v.lastSeenAt AS lastSeen
+
+RETURN suggested.id, mutualCount, viewCount, lastSeen
+ORDER BY (0.6 * mutualCount + 0.25 * viewCount) DESC
+LIMIT 10
+```
+
+#### Trade-offs accepted
+
+Using Neo4j adds operational overhead: it is an additional service to deploy, monitor, and back up. Writes must be synchronized — when a follow/unfollow happens, both MySQL and Neo4j need to be updated (handled via an async BullMQ job in this project).
+
+This is an acceptable trade-off for the suggestion feature because:
+
+- The graph query is simpler and more maintainable than the equivalent multi-join SQL.
+- Traversal performance stays stable as the social graph grows.
+- MySQL remains the source of truth; Neo4j is purely a read-optimized serving layer for graph queries.
+
+If the project were smaller or the suggestion feature simpler (e.g. only one hop, no combined signals), MySQL would be sufficient and Neo4j would be unnecessary complexity.
+
 Follow suggestions combine:
 
 1. Mutual follows: friends of friends.

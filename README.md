@@ -601,6 +601,25 @@ Neo4j stores the graph:
 ### Why Neo4j instead of MySQL for follow suggestions?
 
 Social graphs are fundamentally about **relationships and traversal**. Finding "friends of friends" requires following edges across nodes, which maps naturally to a graph database but becomes expensive in a relational one.
+The graph below illustrates the follow relationship structure. `user1` (current user)
+follows several others. `user7` is a **follow suggestion** — reachable via a mutual
+connection (`user4 → user6 → user7`) and also previously viewed from search.
+
+```
+      [user2]        [user3]
+         ↑ ←FOLLOWS   ↑
+    FOLLOWS↗           ↖FOLLOWS
+         [user1] ──FOLLOWS──→ [user5]
+         FOLLOWS↘
+              [user4]
+                 ↓ FOLLOWS
+              [user6]
+                 ↓ FOLLOWS
+    - - - → [user7] ← · · VIEWED_FROM_SEARCH (user1)
+```
+
+> `user7` scores high in suggestions because: 2 mutual hops via `user4 → user6`,
+> and `user1` recently viewed their profile.
 
 #### The same query in both databases
 

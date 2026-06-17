@@ -605,19 +605,7 @@ The graph below illustrates the follow relationship structure. `user1` (current 
 follows several others. `user7` is a **follow suggestion** — reachable via a mutual
 connection (`user4 → user6 → user7`) and also previously viewed from search.
 
-```
-      [user2]        [user3]
-         ↑ ←FOLLOWS   ↑
-    FOLLOWS↗           ↖FOLLOWS
-         [user1] ──FOLLOWS──→ [user5]
-         FOLLOWS↘
-              [user4]
-                 ↓ FOLLOWS
-              [user6]
-                 ↓ FOLLOWS
-    - - - → [user7] ← · · VIEWED_FROM_SEARCH (user1)
-```
-
+![Neo4j follow suggestion graph](docs/images/neo4j-follow-graph.png)
 > `user7` scores high in suggestions because: 2 mutual hops via `user4 → user6`,
 > and `user1` recently viewed their profile.
 

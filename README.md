@@ -454,6 +454,18 @@ While fan-out on read typically requires:
 ReadCostOnRead(u) = O(number_of_following * posts_per_author + merge + rank)
 ```
 
+### Post processing benchmark snapshots
+
+The following benchmark runs compare the Redis + Queue path with the MySQL-only baseline across warm cache, partial cache miss, and full cache miss scenarios. The metrics track post write p95, feed read p95, wall-clock time, fan-out drain time, and write/read throughput.
+
+![Post processing benchmark run 1](docs/images/post-processing-benchmark-01.png)
+
+![Post processing benchmark run 2](docs/images/post-processing-benchmark-02.png)
+
+![Post processing benchmark run 3](docs/images/post-processing-benchmark-03.png)
+
+![Post processing benchmark run 4](docs/images/post-processing-benchmark-04.png)
+
 ## Feed ranking
 
 The feed is not simply sorted by time. Each post is scored as:

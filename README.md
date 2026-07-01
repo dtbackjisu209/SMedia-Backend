@@ -1,7 +1,7 @@
 # SMedia Backend - Social Media System
 
-<p align="right">
-  <strong>Language:</strong> English | <a href="README.ja.md">日本語</a>
+<p align="left">
+  <strong>Language:</strong> English | <a href="./README.ja.md">日本語</a>
 </p>
 
 Backend for a small-scale Instagram/Facebook-style social network, focused on news feed, follow graph, real-time chat/notifications, stories, moderation, and distributed data caching using Redis + BullMQ.

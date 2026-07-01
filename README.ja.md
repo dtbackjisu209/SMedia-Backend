@@ -1,7 +1,7 @@
 # SMedia Backend - ソーシャルメディアシステム
 
-<p align="right">
-  <strong>言語:</strong> <a href="README.md">English</a> | 日本語
+<p align="left">
+  <strong>言語:</strong> <a href="./README.md">English</a> | 日本語
 </p>
 
 小規模な Instagram/Facebook 風ソーシャルネットワーク向けのバックエンドです。ニュースフィード、フォローグラフ、リアルタイムチャット/通知、ストーリー、モデレーション、そして Redis + BullMQ を使った分散データキャッシュに重点を置いています。

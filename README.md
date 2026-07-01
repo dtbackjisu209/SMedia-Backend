@@ -1,5 +1,9 @@
 # SMedia Backend - Social Media System
 
+<p align="left">
+  <strong>Language:</strong> English | <a href="./README.ja.md">日本語</a>
+</p>
+
 Backend for a small-scale Instagram/Facebook-style social network, focused on news feed, follow graph, real-time chat/notifications, stories, moderation, and distributed data caching using Redis + BullMQ.
 
 The standout feature of the system is a feed designed around **fan-out on write**: when a user creates a post, the system first durably writes data to MySQL, then pushes an asynchronous job to distribute the post ID into each follower's feed cache. When reading the feed, the API retrieves the list of post IDs from Redis, fetches post data snapshots in batches, recovers cache misses from the database, then re-ranks by engagement, recency, and the user's interest profile.
@@ -24,6 +28,13 @@ The standout feature of the system is a feed designed around **fan-out on write*
 - [Interview highlights](#interview-highlights)
 
 ## Tech stack
+
+<p align="center">
+  <img alt="Express.js" src="https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white" />
+  <img alt="Redis" src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+  <img alt="BullMQ" height="28" src="https://user-images.githubusercontent.com/95200/143832033-32e868df-f3b0-4251-97fb-c64809a43d36.png" />
+  <img alt="Neo4j" src="https://img.shields.io/badge/Neo4j-4581C3?style=for-the-badge&logo=neo4j&logoColor=white" />
+</p>
 
 | Layer | Technology | Role |
 | --- | --- | --- |

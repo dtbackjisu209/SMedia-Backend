@@ -54,56 +54,68 @@
 ## 高レベルアーキテクチャ
 
 ```mermaid
-flowchart LR
-    subgraph ClientLayer[Client]
+flowchart TB
+    subgraph ClientLayer[Client app]
         Client[Mobile/Web Client]
     end
 
-    subgraph EntryLayer[Entry layer]
+    subgraph EntryLayer[Request entry]
         direction TB
         API[Express REST API]
-        Socket[Socket.IO Gateway]
+        Auth[JWT Auth Middleware]
+        API --> Auth
     end
 
-    subgraph CoordinationLayer[Coordination layer]
-        direction TB
-        Auth[JWT Auth Middleware]
+    subgraph AsyncLayer[Async queue processing]
+        direction LR
         RedisQueue[(Redis Queue Backend)]
         BullMQ[Managed BullMQ Workers]
-        Notification[Notification Socket]
-        Chat[Chat Socket]
+        RedisQueue --> BullMQ
     end
 
-    subgraph ServiceLayer[Data and external services]
+    subgraph RealtimeLayer[Realtime channel]
         direction TB
+        Socket[Socket.IO Gateway]
+        Notification[Notification Socket]
+        Chat[Chat Socket]
+        Socket --> Notification
+        Socket --> Chat
+    end
+
+    subgraph ServicesLayer[Shared data and media services]
+        direction LR
         MySQL[(MySQL + TypeORM)]
         RedisFanout[(Redis Fanout Cache)]
         Cloudinary[(Cloudinary)]
-        AI[Gemini/OpenRouter Moderation]
         Neo4j[(Neo4j Graph)]
+    end
+
+    subgraph ModerationLayer[Moderation service]
+        AI[Gemini/OpenRouter Moderation]
     end
 
     Client --> API
     Client <--> Socket
 
-    API --> Auth
-    API --> RedisQueue
-    API --> MySQL
-    API --> RedisFanout
-    API --> Cloudinary
-    API --> Neo4j
+    API -->|enqueue jobs| RedisQueue
+    API -->|sync reads/writes| ServicesLayer
 
-    RedisQueue --> BullMQ
-    BullMQ --> MySQL
-    BullMQ --> RedisFanout
-    BullMQ --> Cloudinary
-    BullMQ --> AI
-    BullMQ --> Neo4j
+    BullMQ -->|fan-out, cache refresh, cleanup| ServicesLayer
+    BullMQ -->|AI jobs| AI
 
-    Socket --> Notification
-    Socket --> Chat
-    Notification -.-> Client
-    Chat -.-> Client
+    classDef client fill:#0f766e,stroke:#5eead4,color:#ffffff;
+    classDef entry fill:#1d4ed8,stroke:#93c5fd,color:#ffffff;
+    classDef async fill:#6d28d9,stroke:#c4b5fd,color:#ffffff;
+    classDef realtime fill:#be123c,stroke:#fda4af,color:#ffffff;
+    classDef service fill:#374151,stroke:#d1d5db,color:#ffffff;
+    classDef moderation fill:#92400e,stroke:#fcd34d,color:#ffffff;
+
+    class Client client;
+    class API,Auth entry;
+    class RedisQueue,BullMQ async;
+    class Socket,Notification,Chat realtime;
+    class MySQL,RedisFanout,Cloudinary,Neo4j service;
+    class AI moderation;
 ```
 
 ### 設計方針

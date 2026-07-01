@@ -1,7 +1,7 @@
 # SMedia Backend - ソーシャルメディアシステム
 
 <p align="left">
-  <strong>言語:</strong> <a href="./README.md">English</a> | 日本語
+  <strong>言語:</strong> <a href="./README.md#english">English</a> | 日本語
 </p>
 
 小規模な Instagram/Facebook 風ソーシャルネットワーク向けのバックエンドです。ニュースフィード、フォローグラフ、リアルタイムチャット/通知、ストーリー、モデレーション、そして Redis + BullMQ を使った分散データキャッシュに重点を置いています。
@@ -55,27 +55,55 @@
 
 ```mermaid
 flowchart LR
-    Client[Mobile/Web Client] --> API[Express REST API]
-    Client <--> Socket[Socket.IO Gateway]
+    subgraph ClientLayer[Client]
+        Client[Mobile/Web Client]
+    end
 
-    API --> Auth[JWT Auth Middleware]
-    API --> MySQL[(MySQL + TypeORM)]
-    API --> Cloudinary[(Cloudinary)]
-    API --> RedisFanout[(Redis Fanout Cache)]
-    API --> RedisQueue[(Redis Queue Backend)]
-    API --> Neo4j[(Neo4j Graph)]
+    subgraph EntryLayer[Entry layer]
+        direction TB
+        API[Express REST API]
+        Socket[Socket.IO Gateway]
+    end
 
-    RedisQueue --> BullMQ[Managed BullMQ Workers]
-    BullMQ --> RedisFanout
+    subgraph CoordinationLayer[Coordination layer]
+        direction TB
+        Auth[JWT Auth Middleware]
+        RedisQueue[(Redis Queue Backend)]
+        BullMQ[Managed BullMQ Workers]
+        Notification[Notification Socket]
+        Chat[Chat Socket]
+    end
+
+    subgraph ServiceLayer[Data and external services]
+        direction TB
+        MySQL[(MySQL + TypeORM)]
+        RedisFanout[(Redis Fanout Cache)]
+        Cloudinary[(Cloudinary)]
+        AI[Gemini/OpenRouter Moderation]
+        Neo4j[(Neo4j Graph)]
+    end
+
+    Client --> API
+    Client <--> Socket
+
+    API --> Auth
+    API --> RedisQueue
+    API --> MySQL
+    API --> RedisFanout
+    API --> Cloudinary
+    API --> Neo4j
+
+    RedisQueue --> BullMQ
     BullMQ --> MySQL
+    BullMQ --> RedisFanout
     BullMQ --> Cloudinary
-    BullMQ --> AI[Gemini/OpenRouter Moderation]
+    BullMQ --> AI
     BullMQ --> Neo4j
 
-    Socket --> Notification[Notification Socket]
-    Socket --> Chat[Chat Socket]
-    Notification --> Client
-    Chat --> Client
+    Socket --> Notification
+    Socket --> Chat
+    Notification -.-> Client
+    Chat -.-> Client
 ```
 
 ### 設計方針
